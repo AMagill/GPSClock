@@ -43,7 +43,11 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(GPSClock main.cpp gps.cpp)
+add_executable(GPSClock
+  main.cpp
+  gps.cpp
+  display.cpp
+)
 
 pico_set_program_name(GPSClock "GPSClock")
 pico_set_program_version(GPSClock "0.1")
@@ -66,8 +70,7 @@ target_include_directories(GPSClock PRIVATE
 # Add any user requested libraries
 target_link_libraries(GPSClock 
         hardware_i2c
-        
-        )
+)
 
 pico_add_extra_outputs(GPSClock)
 

@@ -42,6 +42,10 @@
         "*.kml": "xml",
         "charconv": "cpp",
         "chrono": "c",
-        "string_view": "cpp"
-    }
+        "string_view": "cpp",
+        "bitset": "cpp",
+        "algorithm": "cpp",
+        "format": "cpp"
+    },
+    "cortex-debug.variableUseNaturalFormat": false
 }

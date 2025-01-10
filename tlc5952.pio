@@ -1,0 +1,43 @@
+.pio_version 0
+
+.program tlc5952_write
+.side_set 1
+.out 25 left
+.wrap_target
+top:
+    pull               side 0 ; Wait for data
+    out null 6         side 0 ; Discard down to 25 bits + latch flag
+    out x 1            side 0 ; Keep latch flag
+bitloop:
+    out pins, 1        side 0
+    jmp !OSRE bitloop  side 1
+    jmp !x top         side 0
+public latch:
+    set pins, 1        side 0
+    set pins, 0        side 0
+.wrap
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void tlc5952_write_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint clk_pin, uint latch_pin) {
+    pio_gpio_init(pio, tx_pin);
+    pio_gpio_init(pio, clk_pin);
+    pio_gpio_init(pio, latch_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tx_pin,    1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, clk_pin,   1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, latch_pin, 1, true);
+
+    pio_sm_config c = tlc5952_write_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, tx_pin, 1);
+    sm_config_set_set_pins(&c, latch_pin, 1);
+    sm_config_set_sideset_pins(&c, clk_pin);
+
+    float div = clock_get_hz(clk_sys) / (2.0 * 1'000'000);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

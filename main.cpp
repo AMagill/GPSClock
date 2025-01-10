@@ -6,9 +6,9 @@
 #include "gps.h"
 #include "display.h"
 
-#define DISP_PORT i2c1
-#define DISP_SDA 26
-#define DISP_SCL 27
+#define DISP_LATCH_PIN  9
+#define DISP_CLK_PIN   10
+#define DISP_TX_PIN    11
 
 #define GPS_UART uart1
 #define GPS_BAUD 9600
@@ -16,7 +16,7 @@
 #define GPS_PPS_PIN 4
 
 Gps gps;
-std::array<Display, 4> disp;
+Display disp;
 
 void gps_uart_rx_isr()
 {
@@ -36,17 +36,7 @@ int main()
 {
 	stdio_init_all();
 
-	// I2C Initialisation. Using it at 400Khz.
-	i2c_init(DISP_PORT, 400'000);
-	gpio_set_function(DISP_SDA, GPIO_FUNC_I2C);
-	gpio_set_function(DISP_SCL, GPIO_FUNC_I2C);
-	gpio_pull_up(DISP_SDA);
-	gpio_pull_up(DISP_SCL);
-
-	disp[0].init(DISP_PORT, 0x70);
-	disp[1].init(DISP_PORT, 0x71);
-	disp[2].init(DISP_PORT, 0x72);
-	disp[3].init(DISP_PORT, 0x73);
+	disp.init(pio0, DISP_TX_PIN, DISP_CLK_PIN, DISP_LATCH_PIN);
 
 	// Set up the GPS UART
 	uart_init(GPS_UART, GPS_BAUD);
@@ -63,24 +53,43 @@ int main()
 
 	while (true)
 	{
-		std::string bar = fmt::format("{:%y%m%d %H%M%S}", gps.time());
+		using namespace std::chrono;
+		auto dp = floor<days>(gps.time());
+    year_month_day ymd{dp};
+    hh_mm_ss time{floor<milliseconds>(gps.time()-dp)};
+    int year = static_cast<int>(ymd.year());
+    int mon  = static_cast<unsigned int>(ymd.month());
+    int day  = static_cast<unsigned int>(ymd.day());
+    int hour = time.hours()      / 1h;
+    int min  = time.minutes()    / 1min;
+    int sec  = time.seconds()    / 1s;
+    int ms   = time.subseconds() / 1ms;
 
-		std::string_view sv = bar;
-		disp[0].set_disp(sv.substr(0, 4));
-		disp[0].set_dots(false, true, false, true);
-		disp[1].set_disp(sv.substr(4, 4));
-		disp[2].set_disp(sv.substr(8, 4));
-		disp[2].set_dots(true, false, true, false);
-		disp[3].set_char(0, sv[12], true);
-		disp[3].set_char(1, sv[14], false);
-		disp[3].set_char(2, sv[15], false);
-		disp[3].set_char(3, sv[16], false);
+		disp.set_brightness(64);
+		disp.set_colons(true);
+		//disp.set_digit( 0,  0, false);
+		disp.set_digit( 1,  year / 1000 % 10, false);
+		disp.set_digit( 2,  year /  100 % 10, false);
+		disp.set_digit( 3,  year /   10 % 10, false);
+		disp.set_digit( 4,  year        % 10, false);
+		disp.set_digit( 5,  mon  /   10 % 10, false);
+		disp.set_digit( 6,  mon         % 10, false);
+		disp.set_digit( 7,  day  /   10 % 10, false);
+		disp.set_digit( 8,  day         % 10, false);
+		disp.set_digit( 9,  hour /   10 % 10, false);
+		disp.set_digit(10,  hour        % 10, false);
+		disp.set_digit(11,  min  /   10 % 10, false);
+		disp.set_digit(12,  min         % 10, false);
+		disp.set_digit(13,  sec  /   10 % 10, false);
+		disp.set_digit(14,  sec         % 10, true);
+		disp.set_digit(15,  ms   /  100 % 10, false);
+		disp.set_digit(16,  ms   /   10 % 10, false);
+		disp.set_digit(17,  ms          % 10, false);
 
-		disp[0].write_display();
-		disp[1].write_display();
-		disp[2].write_display();
-		disp[3].write_display();
+		disp.latch();
+		disp.send_control(32);
+		disp.send_leds();
 
-		sleep_ms(10);
+		sleep_ms(1);
 	}
 }

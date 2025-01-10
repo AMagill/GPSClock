@@ -28,9 +28,7 @@ void Gps::on_rx(char ch)
 
 void Gps::on_pps()
 {
-	uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
-	uint old_offset = m_phase_offset_us;
-	m_phase_offset_us = hw_time_us % 1000000;
+	m_last_pps_time_us = to_us_since_boot(get_absolute_time());
 }
 
 template <typename T>
@@ -62,63 +60,61 @@ void Gps::handle_sentence(std::string_view sentence)
 	if (checksum != 0)
 		return;
 
-	// Now handle the payload.  We're only really interested in a couple fields from GPRMC.
-	// $GPRMC,041826.000,A,3959.0864,N,10514.5749,W,0.11,95.04,271124,,,A*4C	
-	// 0     1^^^time^^^2 3         4 5          6 7    8     9^date^ABC
-	// We need the time in field 1, and date in field 9.
-	uint8_t th, tm, ts;
-	for (int field = 0; !sentence.empty(); field++)
+	// Split the sentence into fields
+	std::array<std::string_view, 12> fields;  // Could be more, but I don't care.  Increase if needed.
+	for (size_t i = 0; i < fields.size(); i++)
 	{
-		using namespace std::chrono;
-
-		// Trim a field off of the remaining sentence
-		std::string_view value;
 		if (size_t end = sentence.find(','); end != sentence.npos)
 		{
-			value = sentence.substr(0, end);
+			fields[i] = sentence.substr(0, end);
 			sentence = sentence.substr(end + 1);
 		}
 		else
 		{
-			value = sentence;
-			sentence = {};
+			fields[i] = sentence;
+			break;
 		}
+	}
 
-		switch (field)
-		{
-		case 0:
-			if (value != "GPRMC")
-				return;
-			break;
-		case 1:
-			// Expect time, like: "041826.000"
-			if (value.size() < 6)  // Ignoring fraction, using PPS for that
-				return;
-			if (!parse(value.substr(0, 2), th, 10) ||
-			    !parse(value.substr(2, 2), tm, 10) ||
-			    !parse(value.substr(4, 2), ts, 10))
-				return;
-			break;
-		case 9:
-		{
-			if (value.size() != 6)
-				return;
-			int dy;
-			uint dm, dd;
-			if (!parse(value.substr(0, 2), dd, 10) ||
-					!parse(value.substr(2, 2), dm, 10) ||
-					!parse(value.substr(4, 2), dy, 10))
-				return;
+	volatile int foo = 42;
 
-			// Calculate the offset between GPS time and system time
-			time_us gps_time    = sys_days{year{2000+dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
-			uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
-			m_clock_offset_us   = gps_time.time_since_epoch().count() - hw_time_us - m_phase_offset_us;
-			break;
-		}
-		default:
-			// Ignore
-			break;
-		}
+	// Now handle the payload.  We're only really interested in a couple fields from GPRMC.
+	// $GPRMC,041826.000,A,3959.0864,N,10514.5749,W,0.11,95.04,271124,,,A*4C	
+	// 0     1^^^time^^^2 3         4 5          6 7    8     9^date^ABC
+	// We need the time in field 1, and date in field 9.
+	if (fields[0] == "GNRMC")
+	{
+		// Expect time, like: "041826.000"
+		const std::string_view& time = fields[1];
+		uint8_t th, tm, ts;
+		if (time.size() < 6)  // Ignoring fraction, using PPS for that
+			return;
+		if (!parse(time.substr(0, 2), th, 10) ||
+				!parse(time.substr(2, 2), tm, 10) ||
+				!parse(time.substr(4, 2), ts, 10))
+			return;
+
+		// Expect date, like: "271124"
+		const std::string_view& date = fields[9];
+		if (date.size() != 6)
+			return;
+		int dy;
+		uint dm, dd;
+		if (!parse(date.substr(0, 2), dd, 10) ||
+				!parse(date.substr(2, 2), dm, 10) ||
+				!parse(date.substr(4, 2), dy, 10))
+			return;
+
+		// Make sure we've seen a PPS pulse recently
+		uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
+		if (hw_time_us - m_last_pps_time_us > 1'000'000)  // More than a second since last PPS
+			return;
+
+		// Update the offset between GPS time and system time
+		using namespace std::chrono;
+		time_us gps_time  = sys_days{year{2000+dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
+		uint64_t old_offset = m_clock_offset_us;
+		m_clock_offset_us = gps_time.time_since_epoch().count() - m_last_pps_time_us;
+		m_last_correction_us = m_clock_offset_us - old_offset;
 	}
 }

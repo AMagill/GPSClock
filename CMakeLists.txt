@@ -28,22 +28,17 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-# Get libfmt
-include(FetchContent)
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt
-  GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281) # 10.2.1
-FetchContent_MakeAvailable(fmt)
-
 project(GPSClock C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
+add_executable(GPSClock)
 
-add_executable(GPSClock
+pico_generate_pio_header(GPSClock ${CMAKE_CURRENT_LIST_DIR}/tlc5952.pio)
+
+target_sources(GPSClock PRIVATE 
   main.cpp
   gps.cpp
   display.cpp
@@ -56,10 +51,19 @@ pico_set_program_version(GPSClock "0.1")
 pico_enable_stdio_uart(GPSClock 0)
 pico_enable_stdio_usb(GPSClock 0)
 
-# Add the standard library to the build
+# Get libfmt
+include(FetchContent)
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt
+  GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281) # 10.2.1
+FetchContent_MakeAvailable(fmt)
+
 target_link_libraries(GPSClock
-        pico_stdlib
-        fmt::fmt
+  pico_stdlib
+  hardware_pio
+  fmt::fmt
+  hardware_i2c
 )
 
 # Add the standard include files to the build

@@ -18,6 +18,7 @@ private:
 
 	std::array<char, 82> m_buf;  // Maximum length allowed by standard
 	uint m_buf_pos = -1;         // Start in overrun state
-	uint64_t m_clock_offset_us = 0;
-	uint m_phase_offset_us = 0;
+	uint64_t m_clock_offset_us  = 0;
+	uint64_t m_last_pps_time_us = 0;
+	int    m_last_correction_us = 0;
 };

@@ -1,20 +1,27 @@
 #include <cstdint>
 #include <array>
 #include <string_view>
-#include "hardware/i2c.h"
+#include "hardware/pio.h"
 
 class Display
 {
 public:
-    void init(i2c_inst_t* i2c, uint8_t addr);
-    void set_brightness(uint8_t bright);  // 0-15
-    void set_char(uint8_t n, char ch, bool dot);
-    void set_disp(std::string_view str);
-    void set_dots(bool a, bool b, bool c, bool d);
-    void write_display();
+	void init(PIO pio, uint tx_pin, uint clk_pin, uint latch_pin);
+	void latch();
+	void send_control(uint8_t bright);
+	void send_leds();
+
+	void set_brightness(uint8_t bright);
+	void set_digit(uint digit, uint8_t value, bool dp);
+	void set_colons(bool on);
 
 private:
-    i2c_inst_t* m_i2c;
-    uint8_t m_addr;
-    std::array<uint16_t, 4> m_display_buf;
+	static constexpr uint sm = 0;
+	static constexpr uint num_chips = 6;
+
+	PIO m_pio;
+	uint m_latch_pin;
+	uint m_offset;
+	uint32_t m_control_buffer;
+	std::array<uint32_t, num_chips> m_onoff_buffer;
 };

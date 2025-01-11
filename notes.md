@@ -63,3 +63,17 @@ Software TODO
 =============
 [ ] Revisit sync
 [ ] DMA to PIO
+
+
+Bluetooth
+=========
+https://bluekitchen-gmbh.com/btstack/v1.0/profiles/#gatt-generic-attribute-profile
+https://github.dev/raspberrypi/pico-examples/blob/master/pico_w/bt/standalone/server.c
+
+https://github.dev/bluekitchen/btstack/blob/master/example/le_streamer_client.c
+
+https://github.dev/loginov-rocks/Web-Bluetooth-Terminal
+https://loginov-rocks.github.io/Web-Bluetooth-Terminal/
+
+https://developer.mozilla.org/en-US/docs/Web/API/Bluetooth/requestDevice
+

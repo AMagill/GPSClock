@@ -1,10 +1,9 @@
 #include <stdio.h>
-#include <fmt/format.h>
-#include <fmt/chrono.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "gps.h"
 #include "display.h"
+#include "ble.h"
 
 #define DISP_LATCH_PIN  9
 #define DISP_CLK_PIN   10
@@ -51,6 +50,9 @@ int main()
 	gpio_set_irq_enabled(GPS_PPS_PIN, GPIO_IRQ_EDGE_RISE, true);
 	irq_set_enabled(IO_IRQ_BANK0, true);
 
+	ble_init();
+
+	int8_t last_s = -1;
 	while (true)
 	{
 		using namespace std::chrono;
@@ -89,6 +91,12 @@ int main()
 		disp.latch();
 		disp.send_control(32);
 		disp.send_leds();
+
+		if (last_s != sec)
+		{
+			last_s = sec;
+			ble_tick_time(year, mon, day, hour, min, sec);
+		}
 
 		sleep_ms(1);
 	}

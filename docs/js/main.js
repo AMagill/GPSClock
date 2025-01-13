@@ -5,15 +5,20 @@ const btnDisconnect = document.getElementById('disconnect');
 
 btnDisconnect.disabled = true;
 
+config._onTimeChanged = function(date_time) {
+	document.getElementById('time').innerText = date_time;
+};
+
 btnConnect.onclick = function(event) {
+	btnConnect.disabled = true;
 	config.connect()
 		.then(() => {
 			console.log('Connected');
-			btnConnect.disabled = true;
 			btnDisconnect.disabled = false;
 		})
 		.catch((error) => {
 			console.error('Error: ' + error);
+			btnConnect.disabled = false;
 		});
 };
 

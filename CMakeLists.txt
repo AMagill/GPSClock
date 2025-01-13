@@ -42,6 +42,7 @@ target_sources(GPSClock PRIVATE
   main.cpp
   gps.cpp
   display.cpp
+  ble.cpp
 )
 
 pico_set_program_name(GPSClock "GPSClock")
@@ -51,19 +52,13 @@ pico_set_program_version(GPSClock "0.1")
 pico_enable_stdio_uart(GPSClock 0)
 pico_enable_stdio_usb(GPSClock 0)
 
-# Get libfmt
-include(FetchContent)
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt
-  GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281) # 10.2.1
-FetchContent_MakeAvailable(fmt)
-
 target_link_libraries(GPSClock
   pico_stdlib
   hardware_pio
-  fmt::fmt
   hardware_i2c
+  pico_btstack_ble
+  pico_btstack_cyw43
+  pico_cyw43_arch_none
 )
 
 # Add the standard include files to the build
@@ -71,10 +66,13 @@ target_include_directories(GPSClock PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}
 )
 
-# Add any user requested libraries
-target_link_libraries(GPSClock 
-        hardware_i2c
+pico_btstack_make_gatt_header(GPSClock PRIVATE "${CMAKE_CURRENT_LIST_DIR}/ble_config.gatt")
+
+target_compile_definitions(GPSClock PRIVATE
+  CYW43_LWIP=0
 )
+
+set(BTSTACK_ROOT ${PICO_SDK_PATH}/lib/btstack)
 
 pico_add_extra_outputs(GPSClock)
 

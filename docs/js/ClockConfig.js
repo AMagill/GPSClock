@@ -1,14 +1,30 @@
 class ClockConfig {
 	constructor() {
-		this._device = null;
-		this._characteristic = null;
+		this._device     = null;
+		this._chTimeZone = null;
+		this._chBright   = null;
+		this._boundHandleChNotifyTime = this._handleChNotifyTime.bind(this);
+		this._boundHandleDisconnect   = this._handleDisconnect.bind(this);
 	}
 
 	_log(...messages) {
 		console.log(...messages);
 	}
 
-	_onTimeChanged(time) {
+	_onGotValue(name, value) {
+	}
+
+	_onDisconnected() {
+	}
+
+	_handleChNotifyTime(event) {
+		const time = new TextDecoder().decode(event.target.value);
+		this._onGotValue('Time', time);
+	}
+
+	_handleDisconnect(event) {
+		this._log('Unexpected disconnect!');
+		this._onDisconnected();
 	}
 
 	async connect() {
@@ -22,24 +38,32 @@ class ClockConfig {
 		})
 
 		this._log('Selected device: ' + device.name);
+		this._log('Connecting...');
 		this._device = device;
+		this._device.addEventListener('gattserverdisconnected', this._boundHandleDisconnect);
 		const server = await device.gatt.connect();
 
-		this._log('Connected to device');
+		this._log('Finding service...');
 		const service = await server.getPrimaryService(serviceUuid);
 
-		this._log('Service found');
-		const chTime = await service.getCharacteristic('00000002-b0a0-475d-a2f4-a32cd026a911');
+		this._log('Finding characteristics...');
+		const chTime     = await service.getCharacteristic('00000002-b0a0-475d-a2f4-a32cd026a911');
+		this._chTimeZone = await service.getCharacteristic('00000003-b0a0-475d-a2f4-a32cd026a911');
+		this._chBright   = await service.getCharacteristic('00000004-b0a0-475d-a2f4-a32cd026a911');
+
+		this._log('Retrieving values...');
+		const time       = new TextDecoder().decode(await chTime.readValue());
+		this._onGotValue('Time', time);
+		const timeZone   = (await this._chTimeZone.readValue()).getInt32(0, false);
+		this._onGotValue('TimeZone', timeZone);
+		const brightness = (await this._chBright  .readValue()).getInt8(0);
+		this._onGotValue('Brightness', brightness);
+
+		this._log('Starting notifications...');
 		await chTime.startNotifications();
-		chTime.addEventListener('characteristicvaluechanged', (event) => {
-			const time = new TextDecoder().decode(event.target.value);
-			this._onTimeChanged(time);
-		})
-			
-		this._log('Characteristics found');
-		this._characteristic = chTime;
+		chTime.addEventListener('characteristicvaluechanged', this._boundHandleChNotifyTime)
 
-
+		this._log('Connected');
 	}
 
 	disconnect() {
@@ -47,19 +71,37 @@ class ClockConfig {
       return;
     }
 
-    this._log('Disconnecting from "' + this._device.name + '" bluetooth device...');
+    this._log('Disconnecting...');
 
-    this._device.removeEventListener('gattserverdisconnected',
-        console.boundHandleDisconnection);
+    this._device.removeEventListener('gattserverdisconnected', this._boundHandleDisconnect);
 
     if (!this._device.gatt.connected) {
-      this._log('"' + this._device.name +
-          '" bluetooth device is already disconnected');
+      this._log('Device is already disconnected');
       return;
     }
 
     this._device.gatt.disconnect();
 
-    this._log('"' + this._device.name + '" bluetooth device disconnected');
+		this._log('Disconnected');
+		this._onDisconnected();
+	}
+
+	async setValue(name, value) {
+		if (!this._device || !this._device.gatt.connected) {
+			return;
+		}
+
+		this._log('Setting ' + name + ' to ' + value);
+		if (name === 'TimeZone') {
+			const buf = new ArrayBuffer(4);
+			new DataView(buf).setUint32(0, value, false);
+			await this._chTimeZone.writeValueWithResponse(buf);
+		} else if (name === 'Brightness') {
+			const buf = new ArrayBuffer(1);
+			new DataView(buf).setInt8(0, value);
+			await this._chBright.writeValueWithResponse(buf);
+		} else {
+			this._log('Unknown value!');
+		}
 	}
 }

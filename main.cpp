@@ -4,6 +4,7 @@
 #include "gps.h"
 #include "display.h"
 #include "ble.h"
+#include "config.h"
 
 #define DISP_LATCH_PIN  9
 #define DISP_CLK_PIN   10
@@ -14,6 +15,7 @@
 #define GPS_RX_PIN 5
 #define GPS_PPS_PIN 4
 
+Config config;
 Gps gps;
 Display disp;
 
@@ -50,7 +52,11 @@ int main()
 	gpio_set_irq_enabled(GPS_PPS_PIN, GPIO_IRQ_EDGE_RISE, true);
 	irq_set_enabled(IO_IRQ_BANK0, true);
 
+	// Read configuration from flash
+	config_read_from_flash(config);
+
 	ble_init();
+	ble_set_brightness(config.brightness);
 
 	int8_t last_s = -1;
 	while (true)
@@ -67,7 +73,7 @@ int main()
     int sec  = time.seconds()    / 1s;
     int ms   = time.subseconds() / 1ms;
 
-		disp.set_brightness(64);
+		disp.set_brightness(ble_get_brightness());
 		disp.set_colons(true);
 		//disp.set_digit( 0,  0, false);
 		disp.set_digit( 1,  year / 1000 % 10, false);

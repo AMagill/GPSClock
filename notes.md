@@ -51,18 +51,20 @@ https://www.digikey.com/en/products/detail/luckylight/KW1-801AVB/22521896
 
 Board revisions
 ===============
-[x] Make segment holes slightly bigger
-[ ] Segments slightly closer together?
-[x] Make USB port pads longer for soldering
-[x] Pico debug pin hole kind of sucks
-[ ] Tent vias
-[x] Weird squiggle
-[x] Reorder LEDs
+[ ] Level shifter on logic board
+[ ] Alignment holes?
+[ ] Battery?
+[ ] Serial pins
+[ ] GPS test points
+
 
 Software TODO
 =============
 [ ] Revisit sync
 [ ] DMA to PIO
+[ ] Interrupt update
+[ ] Flash settings
+[x] Balance channel current
 
 
 Bluetooth
@@ -77,3 +79,8 @@ https://loginov-rocks.github.io/Web-Bluetooth-Terminal/
 
 https://developer.mozilla.org/en-US/docs/Web/API/Bluetooth/requestDevice
 
+
+Flash
+=====
+https://www.makermatrix.com/blog/read-and-write-data-with-the-pi-pico-onboard-flash/
+https://kevinboone.me/picoflash.html

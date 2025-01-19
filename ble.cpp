@@ -51,11 +51,11 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 		memset(null_addr, 0, 6);
 		
 		{ // Put a unique byte in the advertised name
-			uint8_t id[8];
+			uint8_t id[FLASH_UNIQUE_ID_SIZE_BYTES];
 			flash_get_unique_id(id);
 			assert(adv_data[15] == '0' && adv_data[16] == '0');
-			adv_data[15] = char_for_nibble(id[0] >> 4);
-			adv_data[16] = char_for_nibble(id[0] & 0x0f);
+			adv_data[15] = char_for_nibble(id[FLASH_UNIQUE_ID_SIZE_BYTES-1] >> 4);
+			adv_data[16] = char_for_nibble(id[FLASH_UNIQUE_ID_SIZE_BYTES-1] & 0x0f);
 		}
 		
 		gap_advertisements_set_params(adv_int_min, adv_int_max, adv_type, 0, null_addr, 0x07, 0x00);
@@ -153,3 +153,12 @@ void ble_tick_time(int year, int month, int day, int hour, int min, int sec)
 	att_server_request_can_send_now_event(con_handle);
 }
 
+uint8_t ble_get_brightness()
+{
+	return brightness;
+}
+
+void ble_set_brightness(uint8_t bright)
+{
+	brightness = bright;
+}

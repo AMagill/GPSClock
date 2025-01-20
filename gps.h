@@ -4,21 +4,8 @@
 #include <string_view>
 #include <chrono>
 
-class Gps
-{
-public:
-	using time_us = std::chrono::time_point<std::chrono::system_clock, std::chrono::microseconds>;
+using time_us_t = std::chrono::time_point<std::chrono::system_clock, std::chrono::microseconds>;
 
-	time_us time();
-	void on_rx(char ch);
-	void on_pps();
-
-private:
-	void handle_sentence(std::string_view sentence);
-
-	std::array<char, 82> m_buf;  // Maximum length allowed by standard
-	uint m_buf_pos = -1;         // Start in overrun state
-	uint64_t m_clock_offset_us  = 0;
-	uint64_t m_last_pps_time_us = 0;
-	int    m_last_correction_us = 0;
-};
+void gps_init(uart_inst_t* uart, uint baud, uint rx_pin);
+void gps_on_pps();
+time_us_t gps_get_time();

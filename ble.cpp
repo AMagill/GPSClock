@@ -1,4 +1,5 @@
 #include "ble.hpp"
+#include "config.hpp"
 #include "btstack.h"
 #include "btstack_run_loop_embedded.h"
 #include "hci_dump_embedded_stdout.h"
@@ -8,6 +9,14 @@
 #include "ble_config.h"
 #include "hardware/flash.h"
 #include <format>
+
+#define CH_COMMAND       ATT_CHARACTERISTIC_00000002_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
+#define CH_TIME          ATT_CHARACTERISTIC_00000003_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
+#define CH_TIME_CFG      ATT_CHARACTERISTIC_00000003_B0A0_475D_A2F4_A32CD026A911_01_CLIENT_CONFIGURATION_HANDLE
+#define CH_TIME_ZONE     ATT_CHARACTERISTIC_00000004_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
+#define CH_BRIGHT        ATT_CHARACTERISTIC_00000005_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
+
+extern Config config;
 
 extern uint8_t const profile_data[];  // From the GATT header file
 static btstack_packet_callback_registration_t hci_event_callback_registration;
@@ -20,12 +29,10 @@ static uint8_t adv_data[] = {
 };
 static_assert(sizeof(adv_data) <= 31, "adv_data too long");  // BLE limitation
 
-static int le_notification_enabled;
+static uint16_t time_client_config;
 static hci_con_handle_t con_handle;
-
-static uint8_t current_time[19];  // "YYYY-MM-DD hh:mm:ss"
-static int32_t time_zone;
-static uint8_t brightness;
+static uint8_t current_time[19] = {0};  // "YYYY-MM-DD hh:mm:ss"
+static std::function<void(BLECommand)> command_cb;
 
 static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) 
 {
@@ -64,10 +71,10 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 		break;
 	}
 	case HCI_EVENT_DISCONNECTION_COMPLETE:
-		le_notification_enabled = 0;
+		time_client_config = 0;
 		break;
 	case ATT_EVENT_CAN_SEND_NOW:
-		att_server_notify(con_handle, ATT_CHARACTERISTIC_00000002_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE, current_time, sizeof(current_time));
+		att_server_notify(con_handle, CH_TIME, current_time, sizeof(current_time));
 		break;
 	default:
 		break;
@@ -81,14 +88,14 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t a
 		
 		switch (att_handle) 
 		{
-		case ATT_CHARACTERISTIC_00000002_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE:  // Time
+		case CH_TIME:
 			return att_read_callback_handle_blob(current_time, sizeof(current_time), offset, buffer, buffer_size);
-		case ATT_CHARACTERISTIC_00000002_B0A0_475D_A2F4_A32CD026A911_01_CLIENT_CONFIGURATION_HANDLE:  // Time client configuration
-			return att_read_callback_handle_little_endian_16(le_notification_enabled ? GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION : 0, offset, buffer, buffer_size);
-		case ATT_CHARACTERISTIC_00000003_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE:  // Time zone
-			return att_read_callback_handle_little_endian_32(time_zone, offset, buffer, buffer_size);
-		case ATT_CHARACTERISTIC_00000004_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE:  // Brightness
-			return att_read_callback_handle_byte(brightness, offset, buffer, buffer_size);
+		case CH_TIME_CFG:
+			return att_read_callback_handle_little_endian_16(time_client_config, offset, buffer, buffer_size);
+		case CH_TIME_ZONE:
+			return att_read_callback_handle_little_endian_32(config.time_zone, offset, buffer, buffer_size);
+		case CH_BRIGHT:
+			return att_read_callback_handle_byte(config.brightness, offset, buffer, buffer_size);
 		}
 
 		return 0;
@@ -102,21 +109,33 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
 		
 		switch (att_handle) 
 		{
-		case ATT_CHARACTERISTIC_00000002_B0A0_475D_A2F4_A32CD026A911_01_CLIENT_CONFIGURATION_HANDLE:
+		case CH_COMMAND:
+			if (command_cb)
 			{
-				le_notification_enabled = little_endian_read_16(buffer, 0) == GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION;
+				uint32_t command = little_endian_read_32(buffer, 0);
+				switch (command)  // Values are random 32-bit ints
+				{
+				case 0x31a86b97:  // Save settings
+					command_cb(BLECommand::SAVE_SETTINGS);
+					break;
+				}
+			}
+			break;
+		case CH_TIME_CFG:
+			{
+				time_client_config = little_endian_read_16(buffer, 0);
 				con_handle = connection_handle;
 				
-				if (le_notification_enabled) {
+				if (time_client_config & GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION) {
 						att_server_request_can_send_now_event(con_handle);
 				}
 			}
 			break;
-		case ATT_CHARACTERISTIC_00000003_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE:
-			time_zone = little_endian_read_32(buffer, 0);
+		case CH_TIME_ZONE:
+			config.time_zone = little_endian_read_32(buffer, 0);
 			break;
-		case ATT_CHARACTERISTIC_00000004_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE:
-			brightness = buffer[0];
+		case CH_BRIGHT:
+			config.brightness = buffer[0];
 			break;
 		}
 
@@ -154,12 +173,7 @@ void ble_tick_time(const time_split_t& time)
 	att_server_request_can_send_now_event(con_handle);
 }
 
-uint8_t ble_get_brightness()
+void ble_set_command_cb(std::function<void(BLECommand)> cb)
 {
-	return brightness;
-}
-
-void ble_set_brightness(uint8_t bright)
-{
-	brightness = bright;
+	command_cb = cb;
 }

@@ -1,6 +1,7 @@
 class ClockConfig {
 	constructor() {
 		this._device     = null;
+		this._chCommand  = null;
 		this._chTimeZone = null;
 		this._chBright   = null;
 		this._boundHandleChNotifyTime = this._handleChNotifyTime.bind(this);
@@ -47,9 +48,10 @@ class ClockConfig {
 		const service = await server.getPrimaryService(serviceUuid);
 
 		this._log('Finding characteristics...');
-		const chTime     = await service.getCharacteristic('00000002-b0a0-475d-a2f4-a32cd026a911');
-		this._chTimeZone = await service.getCharacteristic('00000003-b0a0-475d-a2f4-a32cd026a911');
-		this._chBright   = await service.getCharacteristic('00000004-b0a0-475d-a2f4-a32cd026a911');
+		this._chCommand  = await service.getCharacteristic('00000002-b0a0-475d-a2f4-a32cd026a911');
+		const chTime     = await service.getCharacteristic('00000003-b0a0-475d-a2f4-a32cd026a911');
+		this._chTimeZone = await service.getCharacteristic('00000004-b0a0-475d-a2f4-a32cd026a911');
+		this._chBright   = await service.getCharacteristic('00000005-b0a0-475d-a2f4-a32cd026a911');
 
 		this._log('Retrieving values...');
 		const time       = new TextDecoder().decode(await chTime.readValue());

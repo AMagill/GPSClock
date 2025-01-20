@@ -44,6 +44,7 @@ target_sources(GPSClock PRIVATE
   display.cpp
   ble.cpp
   config.cpp
+  time.cpp
 )
 
 pico_set_program_name(GPSClock "GPSClock")

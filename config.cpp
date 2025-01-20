@@ -1,4 +1,4 @@
-#include "config.h"
+#include "config.hpp"
 #include <boards/pico_w.h>
 #include <hardware/flash.h>
 #include <hardware/sync.h>

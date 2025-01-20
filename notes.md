@@ -63,8 +63,10 @@ Software TODO
 [ ] Revisit sync
 [ ] DMA to PIO
 [ ] Interrupt update
-[ ] Flash settings
+[x] Flash settings
 [x] Balance channel current
+[ ] Hook BLE into config better
+[ ] BLE command characteristic, to write flash
 
 
 Bluetooth

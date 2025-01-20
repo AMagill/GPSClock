@@ -1,4 +1,4 @@
-#include "ble.h"
+#include "ble.hpp"
 #include "btstack.h"
 #include "btstack_run_loop_embedded.h"
 #include "hci_dump_embedded_stdout.h"
@@ -145,11 +145,12 @@ void ble_init()
 	hci_power_control(HCI_POWER_ON);
 }
 
-void ble_tick_time(int year, int month, int day, int hour, int min, int sec)
+void ble_tick_time(const time_split_t& time)
 {
 	std::format_to_n(current_time, sizeof(current_time), 
 		"{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
-		year, month, day, hour, min, sec);
+		time.year, time.month, time.day, 
+		time.hour, time.minute, time.second);
 	att_server_request_can_send_now_event(con_handle);
 }
 

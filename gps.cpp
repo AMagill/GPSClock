@@ -1,4 +1,4 @@
-#include "gps.h"
+#include "gps.hpp"
 #include "hardware/uart.h"
 #include <charconv>
 #include <chrono>
@@ -141,4 +141,3 @@ void gps_on_pps()
 {
 	last_pps_time_us = to_us_since_boot(get_absolute_time());
 }
-

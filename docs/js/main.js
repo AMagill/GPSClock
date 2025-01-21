@@ -51,10 +51,22 @@ buttonDisconnect.onclick = function(event) {
 	config.disconnect();
 };
 
-buttonSave.onclick = function(event) {
-	const timeZone   = parseInt(inputTimeZone.value);
+inputTimeZone.oninput = async function(event) {
+	const timeZone = parseInt(inputTimeZone.value);
+
+	if (timeZone >= -12 && timeZone <= 12) {
+		await config.setValue('TimeZone', new Int32Array([timeZone]));
+	}
+}
+
+inputBrightness.oninput = async function(event) {
 	const brightness = parseInt(inputBrightness.value);
 
-	config.setValue('TimeZone',   new Int32Array([timeZone]));
-	config.setValue('Brightness', new Int8Array([brightness]));
+	if (brightness >= 0 && brightness <= 127) {
+		await config.setValue('Brightness', new Int8Array([brightness]));
+	}
+}
+
+buttonSave.onclick = function(event) {
+	config.sendCommandSave();
 }

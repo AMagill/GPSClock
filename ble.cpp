@@ -122,14 +122,8 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
 			}
 			break;
 		case CH_TIME_CFG:
-			{
-				time_client_config = little_endian_read_16(buffer, 0);
-				con_handle = connection_handle;
-				
-				if (time_client_config & GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION) {
-						att_server_request_can_send_now_event(con_handle);
-				}
-			}
+			time_client_config = little_endian_read_16(buffer, 0);
+			con_handle = connection_handle;
 			break;
 		case CH_TIME_ZONE:
 			config.time_zone = little_endian_read_32(buffer, 0);
@@ -170,7 +164,8 @@ void ble_tick_time(const time_split_t& time)
 		"{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
 		time.year, time.month, time.day, 
 		time.hour, time.minute, time.second);
-	att_server_request_can_send_now_event(con_handle);
+	if (time_client_config & GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_INDICATION)
+		att_server_request_can_send_now_event(con_handle);
 }
 
 void ble_set_command_cb(std::function<void(BLECommand)> cb)

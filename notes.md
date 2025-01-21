@@ -66,7 +66,7 @@ Software TODO
 [x] Flash settings
 [x] Balance channel current
 [ ] Hook BLE into config better
-[ ] BLE command characteristic, to write flash
+[x] BLE command characteristic, to write flash
 
 
 Bluetooth

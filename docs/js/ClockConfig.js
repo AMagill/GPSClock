@@ -56,7 +56,7 @@ class ClockConfig {
 		this._log('Retrieving values...');
 		const time       = new TextDecoder().decode(await chTime.readValue());
 		this._onGotValue('Time', time);
-		const timeZone   = (await this._chTimeZone.readValue()).getInt32(0, false);
+		const timeZone   = (await this._chTimeZone.readValue()).getInt32(0, true);
 		this._onGotValue('TimeZone', timeZone);
 		const brightness = (await this._chBright  .readValue()).getInt8(0);
 		this._onGotValue('Brightness', brightness);
@@ -96,7 +96,7 @@ class ClockConfig {
 		this._log('Setting ' + name + ' to ' + value);
 		if (name === 'TimeZone') {
 			const buf = new ArrayBuffer(4);
-			new DataView(buf).setUint32(0, value, false);
+			new DataView(buf).setUint32(0, value, true);
 			await this._chTimeZone.writeValueWithResponse(buf);
 		} else if (name === 'Brightness') {
 			const buf = new ArrayBuffer(1);
@@ -105,5 +105,16 @@ class ClockConfig {
 		} else {
 			this._log('Unknown value!');
 		}
+	}
+
+	async sendCommandSave() {
+		if (!this._device || !this._device.gatt.connected) {
+			return;
+		}
+
+		this._log('Sending save command');
+		const buf = new ArrayBuffer(4);
+		new DataView(buf).setUint32(0, 0x31a86b97, true);
+		await this._chCommand.writeValueWithResponse(buf);
 	}
 }

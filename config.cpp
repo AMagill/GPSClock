@@ -48,8 +48,8 @@ void config_read_from_flash(Config &config)
 	else
 	{
 		// Default values
-		config.time_zone = 0;
-		config.brightness = 0;
+		config.time_zone  = 0;
+		config.brightness = 64;
 	}
 }
 

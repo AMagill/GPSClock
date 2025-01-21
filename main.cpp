@@ -47,14 +47,14 @@ int main()
 	int8_t last_s = -1;
 	while (true)
 	{
-		time_us_t time_us = gps_get_time();
+		Time_us time_us = gps_get_time();
 		time_us += config.time_zone * 1h;
-		time_split_t time_parts = time_split(time_us);
+		Time_Parts time_parts = time_split(time_us);
+		Time_Quality quality = gps_get_time_quality();
 
 		disp_set_brightness(config.brightness);
-		disp_set_time(time_parts);
+		disp_set_time(time_parts, quality);
 
-		disp_latch();
 		disp_send_control();
 		disp_send_leds();
 
@@ -64,6 +64,9 @@ int main()
 			ble_tick_time(time_parts);
 		}
 
-		sleep_ms(1);
+		uint64_t us_to_next_ms = 1000 - (time_us.time_since_epoch() % 1ms).count();
+		sleep_us(us_to_next_ms);
+
+		disp_latch();
 	}
 }

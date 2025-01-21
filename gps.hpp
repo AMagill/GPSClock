@@ -7,4 +7,5 @@
 
 void gps_init(uart_inst_t* uart, uint baud, uint rx_pin);
 void gps_on_pps();
-time_us_t gps_get_time();
+Time_us gps_get_time();
+Time_Quality gps_get_time_quality();

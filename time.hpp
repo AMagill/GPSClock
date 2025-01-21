@@ -2,9 +2,9 @@
 #include <chrono>
 #include <cmath>
 
-using time_us_t = std::chrono::time_point<std::chrono::system_clock, std::chrono::microseconds>;
+using Time_us = std::chrono::time_point<std::chrono::system_clock, std::chrono::microseconds>;
 
-struct time_split_t
+struct Time_Parts
 {
 	int year;
 	int month;
@@ -15,4 +15,12 @@ struct time_split_t
 	int millisecond;
 };
 
-time_split_t time_split(time_us_t time_us);
+enum class Time_Quality
+{
+	INVALID,  // No idea of date or time
+	LOW,      // Time was known once, but not recently
+	MEDIUM,   // Time is fresh, but not PPS synced
+	HIGH,     // Time is fresh, and PPS synced
+};
+
+Time_Parts time_split(Time_us time_us);

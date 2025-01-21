@@ -2,12 +2,11 @@
 #include "pico/stdlib.h"
 #include "tlc5952.pio.h"
 
-static constexpr uint sm = 0;
+static constexpr uint pio_sm    = 0;
 static constexpr uint num_chips = 6;
 
 static PIO  pio;
-static uint latch_pin;
-static uint offset;
+static uint pio_offset;
 static uint32_t control_buffer;
 static std::array<uint32_t, num_chips> onoff_buffer;
 
@@ -15,19 +14,18 @@ static std::array<uint32_t, num_chips> onoff_buffer;
 void disp_init(PIO pio, uint tx_pin, uint clk_pin, uint latch_pin)
 {
 	::pio = pio;
-	::latch_pin = latch_pin;
 
 	gpio_init(latch_pin);
 	gpio_set_dir(latch_pin, true);
 	gpio_put(latch_pin, false);
 
-	offset = pio_add_program(pio, &tlc5952_write_program);
-	tlc5952_write_program_init(pio, sm, offset, tx_pin, clk_pin, latch_pin);
+	pio_offset = pio_add_program(pio, &tlc5952_write_program);
+	tlc5952_write_program_init(pio, pio_sm, pio_offset, tx_pin, clk_pin, latch_pin);
 }
 
 void disp_latch()
 {
-		pio_sm_exec(pio, sm, pio_encode_jmp(offset + tlc5952_write_offset_latch));
+	pio_sm_exec(pio, pio_sm, pio_encode_jmp(pio_offset + tlc5952_write_offset_latch));
 }
 
 void disp_send_control()
@@ -35,14 +33,14 @@ void disp_send_control()
 	for (int i = num_chips; i > 0; i--)
 	{
 		uint32_t latch = (i == 1) ? 0x02'000000 : 0;
-		pio_sm_put_blocking(pio, sm, control_buffer | latch);
+		pio_sm_put_blocking(pio, pio_sm, control_buffer | latch);
 	}
 }
 
 void disp_send_leds()
 {
 	for (const uint32_t on : onoff_buffer)
-		pio_sm_put_blocking(pio, sm, on);
+		pio_sm_put_blocking(pio, pio_sm, on);
 }
 
 void disp_set_brightness(uint8_t bright)
@@ -91,7 +89,7 @@ void disp_set_digit(uint digit, uint8_t value, bool dp)
 		0xC2, // 7
 		0xFE, // 8
 		0xF6, // 9
-		0x00
+		0x00  // Blank
 	};
 
 	uint chip   = num_chips - 1 - (digit / 3);
@@ -114,24 +112,51 @@ void disp_set_colons(bool on)
 		onoff_buffer[5] &= ~colon_bits;
 }
 
-void disp_set_time(const time_split_t& time)
+void disp_set_time(const Time_Parts& time, Time_Quality quality)
 {
 	disp_set_colons(true);
-	disp_set_digit( 1,  time.year        / 1000 % 10, false);
-	disp_set_digit( 2,  time.year        /  100 % 10, false);
-	disp_set_digit( 3,  time.year        /   10 % 10, false);
-	disp_set_digit( 4,  time.year               % 10, false);
-	disp_set_digit( 5,  time.month       /   10 % 10, false);
-	disp_set_digit( 6,  time.month              % 10, false);
-	disp_set_digit( 7,  time.day         /   10 % 10, false);
-	disp_set_digit( 8,  time.day                % 10, false);
-	disp_set_digit( 9,  time.hour        /   10 % 10, false);
-	disp_set_digit(10,  time.hour               % 10, false);
-	disp_set_digit(11,  time.minute      /   10 % 10, false);
-	disp_set_digit(12,  time.minute             % 10, false);
-	disp_set_digit(13,  time.second      /   10 % 10, false);
-	disp_set_digit(14,  time.second             % 10, true);
-	disp_set_digit(15,  time.millisecond /  100 % 10, false);
-	disp_set_digit(16,  time.millisecond /   10 % 10, false);
-	disp_set_digit(17,  time.millisecond        % 10, false);
+
+	if (quality == Time_Quality::INVALID)
+	{	// Blank date when time is invalid; basically a timer since boot
+		for (int i = 1; i <= 8; i++)
+			disp_set_digit(i, 10, false);
+	}
+	else
+	{
+		disp_set_digit(1, time.year  / 1000 % 10, false);
+		disp_set_digit(2, time.year  /  100 % 10, false);
+		disp_set_digit(3, time.year  /   10 % 10, false);
+		disp_set_digit(4, time.year         % 10, false);
+		disp_set_digit(5, time.month /   10 % 10, false);
+		disp_set_digit(6, time.month        % 10, false);
+		disp_set_digit(7, time.day   /   10 % 10, false);
+		disp_set_digit(8, time.day          % 10, false);
+	}
+
+	disp_set_digit( 9, time.hour   / 10 % 10, false);
+	disp_set_digit(10, time.hour        % 10, false);
+	disp_set_digit(11, time.minute / 10 % 10, false);
+	disp_set_digit(12, time.minute      % 10, false);
+	disp_set_digit(13, time.second / 10 % 10, false);
+	disp_set_digit(14, time.second      % 10, true);
+
+	// Degrade display resolution as quality decreases
+	if (quality == Time_Quality::LOW)
+	{
+		disp_set_digit(15, time.millisecond / 100 % 10, false);
+		disp_set_digit(16, 10, false);
+		disp_set_digit(17, 10, false);
+	}
+	else if (quality == Time_Quality::MEDIUM)
+	{	
+		disp_set_digit(15, time.millisecond / 100 % 10, false);
+		disp_set_digit(16, time.millisecond /  10 % 10, false);
+		disp_set_digit(17, 10, false);
+	}
+	else if (quality == Time_Quality::HIGH || quality == Time_Quality::INVALID)
+	{
+		disp_set_digit(15, time.millisecond / 100 % 10, false);
+		disp_set_digit(16, time.millisecond /  10 % 10, false);
+		disp_set_digit(17, time.millisecond       % 10, false);
+	}
 }

@@ -1,10 +1,10 @@
 #include "time.hpp"
 
-time_split_t time_split(time_us_t time_us)
+Time_Parts time_split(Time_us time_us)
 {
 	using namespace std::chrono;
 	
-	time_split_t time;
+	Time_Parts time;
 	
 	auto date_days = floor<days>(time_us);
 	year_month_day ymd{date_days};

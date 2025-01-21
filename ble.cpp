@@ -158,7 +158,7 @@ void ble_init()
 	hci_power_control(HCI_POWER_ON);
 }
 
-void ble_tick_time(const time_split_t& time)
+void ble_tick_time(const Time_Parts& time)
 {
 	std::format_to_n(current_time, sizeof(current_time), 
 		"{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 

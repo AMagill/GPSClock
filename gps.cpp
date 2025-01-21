@@ -5,10 +5,12 @@
 
 static uart_inst_t* uart;
 static std::array<char, 82> rx_buf;  // Maximum length allowed by standard
-static uint     rx_buf_pos         = rx_buf.size();  // Start in overrun state
-static uint64_t clock_offset_us    = 0;
-static uint64_t last_pps_time_us   = 0;
-static int      last_correction_us = 0;
+static uint         rx_buf_pos         = rx_buf.size();  // Start in overrun state
+static uint64_t     clock_offset_us    = 0;
+static uint64_t     last_pps_time_us   = 0;
+static uint64_t     last_msg_time_us   = 0;
+static int          last_correction_us = 0;
+static Time_Quality quality            = Time_Quality::INVALID;
 
 
 template <typename T>
@@ -56,6 +58,8 @@ static void handle_sentence(std::string_view sentence)
 		}
 	}
 
+	uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
+
 	// Now handle the payload.  We're only really interested in a couple fields from GPRMC.
 	// $GPRMC,041826.000,A,3959.0864,N,10514.5749,W,0.11,95.04,271124,,,A*4C	
 	// 0     1^^^time^^^2 3         4 5          6 7    8     9^date^ABC
@@ -64,12 +68,13 @@ static void handle_sentence(std::string_view sentence)
 	{
 		// Expect time, like: "041826.000"
 		const std::string_view& time = fields[1];
-		uint8_t th, tm, ts;
-		if (time.size() < 6)  // Ignoring fraction, using PPS for that
+		uint8_t th, tm, ts, tms;
+		if (time.size() < 10)
 			return;
-		if (!parse(time.substr(0, 2), th, 10) ||
-				!parse(time.substr(2, 2), tm, 10) ||
-				!parse(time.substr(4, 2), ts, 10))
+		if (!parse(time.substr(0, 2), th,  10) ||
+		    !parse(time.substr(2, 2), tm,  10) ||
+		    !parse(time.substr(4, 2), ts,  10) ||
+		    !parse(time.substr(7, 3), tms, 10))
 			return;
 
 		// Expect date, like: "271124"
@@ -79,22 +84,49 @@ static void handle_sentence(std::string_view sentence)
 		int dy;
 		uint dm, dd;
 		if (!parse(date.substr(0, 2), dd, 10) ||
-				!parse(date.substr(2, 2), dm, 10) ||
-				!parse(date.substr(4, 2), dy, 10))
+		    !parse(date.substr(2, 2), dm, 10) ||
+		    !parse(date.substr(4, 2), dy, 10))
 			return;
 
-		// Make sure we've seen a PPS pulse recently
-		uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
-		if (hw_time_us - last_pps_time_us > 1'000'000)  // More than a second since last PPS
-			return;
-
-		// Update the offset between GPS time and system time
+		// Assemble the time
 		using namespace std::chrono;
-		time_us_t gps_time  = sys_days{year{2000+dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
+		Time_us gps_time  = sys_days{year{2000+dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
 		uint64_t old_offset = clock_offset_us;
-		clock_offset_us = gps_time.time_since_epoch().count() - last_pps_time_us;
+		last_msg_time_us    = hw_time_us;
+
+		// Check how long it's been since the last PPS pulse
+		if (hw_time_us - last_pps_time_us < 1'000'000)
+		{	// Less than a second since last PPS.  We're going to ignore the
+			// milliseconds in the message, and align the second to the PPS.
+			clock_offset_us = gps_time.time_since_epoch().count() - last_pps_time_us;
+		}
+		else
+		{	// More than a second since last PPS.  We'll use the message time.
+			gps_time += milliseconds(tms);
+			clock_offset_us = gps_time.time_since_epoch().count() - hw_time_us;
+		}
+
 		last_correction_us = clock_offset_us - old_offset;
 	}
+
+	// Estimate time quality
+	//            I L M H
+	// Have  msg  N Y Y Y
+	// Fresh msg  N N Y Y
+	// Fresh PPS  N N N Y
+	if (last_msg_time_us > 0)
+	{
+		if (hw_time_us - last_msg_time_us < 1'000'000)
+		{
+			if (hw_time_us - last_pps_time_us < 1'000'000)
+				quality = Time_Quality::HIGH;
+			else
+				quality = Time_Quality::MEDIUM;
+		}
+		else
+			quality = Time_Quality::LOW;
+	}
+	// Quality is initially invalid, but we can never drop back down to it.
 }
 
 static void uart_rx_isr()
@@ -127,14 +159,19 @@ void gps_init(uart_inst_t* uart, uint baud, uint rx_pin)
 	uart_set_irq_enables(uart, true, false);
 }
 
-time_us_t gps_get_time()
+Time_us gps_get_time()
 {
 	using namespace std::chrono;
 
 	uint64_t hw_time = to_us_since_boot(get_absolute_time());
-	time_us_t time = time_us_t(microseconds(clock_offset_us)) + microseconds(hw_time);
+	Time_us time = time_us_t(microseconds(clock_offset_us)) + microseconds(hw_time);
 
-  return time;
+	return time;
+}
+
+Time_Quality gps_get_time_quality()
+{
+	return quality;
 }
 
 void gps_on_pps()

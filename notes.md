@@ -65,7 +65,7 @@ Software TODO
 [ ] Interrupt update
 [x] Flash settings
 [x] Balance channel current
-[ ] Hook BLE into config better
+[x] Hook BLE into config better
 [x] BLE command characteristic, to write flash
 
 

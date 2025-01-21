@@ -9,6 +9,8 @@
 
 #define GPS_PPS_PIN 4
 
+using namespace std::chrono_literals;
+
 Config config;
 
 static void gpio_isr(uint gpio, uint32_t event_mask)
@@ -46,6 +48,7 @@ int main()
 	while (true)
 	{
 		time_us_t time_us = gps_get_time();
+		time_us += config.time_zone * 1h;
 		time_split_t time_parts = time_split(time_us);
 
 		disp_set_brightness(config.brightness);

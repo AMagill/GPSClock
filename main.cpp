@@ -47,16 +47,16 @@ int main()
 	int8_t last_s = -1;
 	while (true)
 	{
-		Time_us time_us = gps_get_time();
-		time_us += config.time_zone * 1h;
-		Time_Parts time_parts = time_split(time_us);
 		Time_Quality quality = gps_get_time_quality();
+		Time_us time_us = gps_get_time();
+		if (quality != Time_Quality::INVALID)
+			time_us += config.time_zone * 1h;
+		Time_Parts time_parts = time_split(time_us);
 
 		disp_set_brightness(config.brightness);
 		disp_set_time(time_parts, quality);
 
-		disp_send_control();
-		disp_send_leds();
+		disp_send();
 
 		if (last_s != time_parts.second)
 		{

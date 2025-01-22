@@ -1,15 +1,18 @@
 #include "display.hpp"
 #include "pico/stdlib.h"
+#include "hardware/dma.h"
 #include "tlc5952.pio.h"
+
+#define BOARD_VERSION 2
 
 static constexpr uint pio_sm    = 0;
 static constexpr uint num_chips = 6;
 
 static PIO  pio;
 static uint pio_offset;
-static uint32_t control_buffer;
-static std::array<uint32_t, num_chips> onoff_buffer;
-
+// 2 commands per chip; brightness and on/off
+static std::array<uint32_t, num_chips*2> command_buffer;
+static int dma_channel;
 
 void disp_init(PIO pio, uint tx_pin, uint clk_pin, uint latch_pin)
 {
@@ -21,6 +24,18 @@ void disp_init(PIO pio, uint tx_pin, uint clk_pin, uint latch_pin)
 
 	pio_offset = pio_add_program(pio, &tlc5952_write_program);
 	tlc5952_write_program_init(pio, pio_sm, pio_offset, tx_pin, clk_pin, latch_pin);
+
+	dma_channel = dma_claim_unused_channel(true);
+	dma_channel_config dma_config = dma_channel_get_default_config(dma_channel);
+	channel_config_set_dreq(&dma_config, pio_get_dreq(pio, pio_sm, true));  // Sending to PIO
+	channel_config_set_transfer_data_size(&dma_config, DMA_SIZE_32);  // 32 bits per word
+	channel_config_set_read_increment(&dma_config, true);  // Do increment read address
+	dma_channel_configure(dma_channel, &dma_config, 
+		&pio->txf[pio_sm],  // Write address: PIO TX FIFO
+		nullptr,            // No read address yet
+		num_chips*2,        // Transfer count: 2 commands per chip
+		false               // Don't trigger yet
+	);
 }
 
 void disp_latch()
@@ -28,19 +43,9 @@ void disp_latch()
 	pio_sm_exec(pio, pio_sm, pio_encode_jmp(pio_offset + tlc5952_write_offset_latch));
 }
 
-void disp_send_control()
+void disp_send()
 {
-	for (int i = num_chips; i > 0; i--)
-	{
-		uint32_t latch = (i == 1) ? 0x02'000000 : 0;
-		pio_sm_put_blocking(pio, pio_sm, control_buffer | latch);
-	}
-}
-
-void disp_send_leds()
-{
-	for (const uint32_t on : onoff_buffer)
-		pio_sm_put_blocking(pio, pio_sm, on);
+	dma_channel_set_read_addr(dma_channel, command_buffer.data(), true);  // Start DMA transfer
 }
 
 void disp_set_brightness(uint8_t bright)
@@ -49,17 +54,23 @@ void disp_set_brightness(uint8_t bright)
 	// so we need to slightly dim red and green to compensate.
 	uint8_t brightRG = bright * 0.88f;  // Experimentally determined
 
-	control_buffer = 0x01'000000 |
-		bright   << 14 |  // Bright B 0-127
-		brightRG <<  7 |  // Bright G 0-127
-		brightRG;         // Bright R 0-127
+	for (int i = 0; i < num_chips; i++)
+	{
+		command_buffer[i] = 0x01'000000 |
+			bright   << 14 |  // Bright B 0-127
+			brightRG <<  7 |  // Bright G 0-127
+			brightRG;         // Bright R 0-127
+	}
+
+	// Set flag to latch after the last chip
+	command_buffer[num_chips-1] |= 0x02'000000;
 }
 
 void disp_set_digit(uint digit, uint8_t value, bool dp)
 {
-#if BOARD_V1
+#if BOARD_VERSION == 1
 	static constexpr uint32_t dp_bits = 0x000001;
-	static constexpr std::array<uint32_t, 10> digit_bits = {
+	static constexpr std::array<uint32_t, 11> digit_bits = {
 		0x248248, // 0
 		0x200008, // 1
 		0x241240, // 2
@@ -70,13 +81,14 @@ void disp_set_digit(uint digit, uint8_t value, bool dp)
 		0x240008, // 7
 		0x249248, // 8
 		0x249048, // 9
+		0x000000, // Blank
 	};
 
 	uint chip   = num_chips - 1 - (digit / 3);
 	uint offset = digit % 3;
-	onoff_buffer[chip] &= ~((digit_bits[8] | dp_bits) << offset);
-	onoff_buffer[chip] |= (digit_bits[value] | (dp ? dp_bits : 0)) << offset;
-#else // BOARD_V2
+	command_buffer[num_chips + chip] &= ~((digit_bits[8] | dp_bits) << offset);
+	command_buffer[num_chips + chip] |= (digit_bits[value] | (dp ? dp_bits : 0)) << offset;
+#else // BOARD_VERSION == 2
 	static constexpr uint32_t dp_bit = 0x000001;
 	static constexpr std::array<uint8_t, 11> digit_bits = {
 		0xEE, // 0
@@ -93,23 +105,24 @@ void disp_set_digit(uint digit, uint8_t value, bool dp)
 	};
 
 	uint chip   = num_chips - 1 - (digit / 3);
-	uint offset = digit % 3;
-	onoff_buffer[chip] &= ~((0xFF << (offset * 8)));
-	onoff_buffer[chip] |= (digit_bits[value] | (dp ? dp_bit : 0)) << (offset * 8);
+	uint offset = (digit % 3) * 8;
+	// +num_chips because the first half of the buffer is brightness settings
+	command_buffer[num_chips + chip] &= ~(0xFF << offset);
+	command_buffer[num_chips + chip] |= (digit_bits[value] | (dp ? dp_bit : 0)) << offset;
 #endif
 }
 
 void disp_set_colons(bool on)
 {
-#if BOARD_V1
+#if BOARD_VERSION == 1
 	constexpr uint32_t colon_bits = 0x000249;
-#else // BOARD_V2
-	constexpr uint32_t colon_bits = 0xFF;
+#else // BOARD_VERSION == 2
+	constexpr uint32_t colon_bits = 0x0000FF;
 #endif
 	if (on)
-		onoff_buffer[5] |= colon_bits;
+		command_buffer[num_chips*2-1] |= colon_bits;
 	else
-		onoff_buffer[5] &= ~colon_bits;
+		command_buffer[num_chips*2-1] &= ~colon_bits;
 }
 
 void disp_set_time(const Time_Parts& time, Time_Quality quality)

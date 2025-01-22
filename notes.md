@@ -60,9 +60,9 @@ Board revisions
 
 Software TODO
 =============
-[ ] Revisit sync
-[ ] DMA to PIO
-[ ] Interrupt update
+[x] Revisit sync
+[x] DMA to PIO
+[?] Interrupt update
 [x] Flash settings
 [x] Balance channel current
 [x] Hook BLE into config better

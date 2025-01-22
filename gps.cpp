@@ -164,7 +164,7 @@ Time_us gps_get_time()
 	using namespace std::chrono;
 
 	uint64_t hw_time = to_us_since_boot(get_absolute_time());
-	Time_us time = time_us_t(microseconds(clock_offset_us)) + microseconds(hw_time);
+	Time_us time = Time_us(microseconds(clock_offset_us)) + microseconds(hw_time);
 
 	return time;
 }

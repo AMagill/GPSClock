@@ -3,6 +3,8 @@
 #include <charconv>
 #include <chrono>
 
+#define ECHO_ON 0
+
 static uart_inst_t* uart;
 static std::array<char, 82> rx_buf;  // Maximum length allowed by standard
 static uint         rx_buf_pos         = rx_buf.size();  // Start in overrun state
@@ -40,7 +42,12 @@ static void handle_sentence(std::string_view sentence)
 
 	// Should come out to zero when valid
 	if (checksum != 0)
+	{
+#if ECHO_GPS
+		printf("   CS FAIL\n");
+#endif
 		return;
+	}
 
 	// Split the sentence into fields
 	std::array<std::string_view, 12> fields;  // Could be more, but I don't care.  Increase if needed.
@@ -134,6 +141,9 @@ static void uart_rx_isr()
 	while (uart_is_readable(uart))
 	{
 		char ch = uart_getc(uart);
+#if ECHO_GPS
+		printf("%c", ch);
+#endif
 		
 		if (ch == '$')  // Start delimiter
 			rx_buf_pos = 0;

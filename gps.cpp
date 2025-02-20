@@ -157,6 +157,31 @@ static void uart_rx_isr()
 	}
 }
 
+void gps_send_ubx(uint8_t cls, uint8_t id, std::initializer_list<uint8_t> payload)
+{
+	uart_write_blocking(uart, "\xB5\x62", 2);
+	uart_write_blocking(uart, &cls, 1);
+	uart_write_blocking(uart, &id, 1);
+	uint16_t len = payload.size();
+	uart_write_blocking(uart, (uint8_t*)&len, 2);
+	uart_write_blocking(uart, payload.begin(), len);
+
+	uint8_t ck_a = 0, ck_b = 0;
+	auto sum = [&ck_a, &ck_b](uint8_t b)
+	{
+		ck_a += b;
+		ck_b += ck_a;
+	};
+	sum(cls);
+	sum(id);
+	sum(len & 0xFF);
+	sum(len >> 8);
+	for (uint8_t b : payload)
+		sum(b);
+	uart_write_blocking(uart, &ck_a, 1);
+	uart_write_blocking(uart, &ck_b, 1);
+}
+
 void gps_init(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
 {
 	// Set up the GPS UART
@@ -171,6 +196,16 @@ void gps_init(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
 	irq_set_exclusive_handler(gps_uart_irq, uart_rx_isr);
 	irq_set_enabled(gps_uart_irq, true);
 	uart_set_irq_enables(uart, true, false);
+
+	gps_send_ubx(0x06, 0x24, {0xF0, 0x00, 0x00});  // GGA off
+	gps_send_ubx(0x06, 0x24, {0xF0, 0x01, 0x00});  // GLL off
+	gps_send_ubx(0x06, 0x24, {0xF0, 0x02, 0x00});  // GSA off
+	gps_send_ubx(0x06, 0x24, {0xF0, 0x03, 0x00});  // GSV off
+	//gps_send_ubx(0x06, 0x24, {0xF0, 0x04, 0x00});  // RMC off
+	gps_send_ubx(0x06, 0x24, {0xF0, 0x05, 0x00});  // VTG off
+	//gps_send_ubx(0x06, 0x24, {0x01, 0x21, 0x01});  // UBX-NAV-TIMEUTC 1Hz
+	gps_send_ubx(0x06, 0x24, {0x01, 0x21, 0x01});  // UBX-TIM-TOS 1Hz
+
 }
 
 Time_us gps_get_time()

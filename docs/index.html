@@ -3,29 +3,37 @@
 <head>
 	<meta charset="utf-8">
 	<title>GPS Clock Configuration</title>
+	<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-	<button type="button" id="connect">Connect</button>
-	<button type="button" id="disconnect" disabled>Disconnect</button>
-	<br>
+	<div class="container">
+		<div class="row">
+			<div>
+				<button type="button" id="connect">Connect</button>
+				<button type="button" id="disconnect" disabled>Disconnect</button>
+			</div>
+		</div>
 
-	<table>
-		<tr>
-			<td>Time</td>
-			<td id="time"></td>
-		</tr>
-		<tr>
-			<td>Time zone</td>
-			<td><input type="number" id="timezone" disabled></td>
-		</tr>
-		<tr>
-			<td>Brightness</td>
-			<td><input type="number" id="brightness" disabled></td>
-		</tr>
-	</table>
+		<div class="row">
+			<label for="time">Time</label>
+			<span id="time"></span>
+		</div>
 
-	<button type="button" id="save" disabled>Save</button>
+		<div class="row">
+			<label for="timezone">Time zone</label>
+			<input type="number" id="timezone" disabled>
+		</div>
+
+		<div class="row">
+			<label for="brightness">Brightness</label>
+			<input type="number" id="brightness" disabled>
+		</div>
+
+		<div class="row">
+			<button type="button" id="save" disabled>Save</button>
+		</div>
+	</div>
 
 	<script src="js/ClockConfig.js"></script>
 	<script src="js/main.js"></script>

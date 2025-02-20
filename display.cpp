@@ -150,3 +150,33 @@ void disp_set_time(const Time_Parts& time, Time_Quality quality)
 		disp_set_digit(17, time.millisecond       % 10, false);
 	}
 }
+
+void disp_test()
+{
+		// Startup screen test
+		disp_set_brightness(127);
+		for (int i = 0; i < 6; ++i)
+		{
+			uint32_t bits = 0;
+			for (int j = 0; j < 24; ++j)
+			{
+				bits = bits<<1 | 1;
+				disp_set_raw(i, bits);
+				disp_send();
+				disp_latch();
+				sleep_ms(20);
+			}
+		}
+		for (int i = 5; i >= 0; --i)
+		{
+			uint32_t bits = 0x00FFFFFF;
+			for (int j = 0; j < 24; ++j)
+			{
+				bits >>= 1;
+				disp_set_raw(i, bits);
+				disp_send();
+				disp_latch();
+				sleep_ms(20);
+			}
+		}	
+}

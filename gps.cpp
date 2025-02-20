@@ -147,12 +147,16 @@ static void uart_rx_isr()
 	}
 }
 
-void gps_init(uart_inst_t* uart, uint baud, uint rx_pin)
+void gps_init(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
 {
 	// Set up the GPS UART
 	::uart = uart;
 	uart_init(uart, baud);
 	gpio_set_function(rx_pin, GPIO_FUNC_UART);
+	gpio_set_function(tx_pin, GPIO_FUNC_UART);
+	uart_set_hw_flow(uart, false, false);  // No CTS, no RTS
+	uart_set_format(uart, 8, 1, UART_PARITY_NONE);
+	
 	uint gps_uart_irq = UART_IRQ_NUM(uart);
 	irq_set_exclusive_handler(gps_uart_irq, uart_rx_isr);
 	irq_set_enabled(gps_uart_irq, true);

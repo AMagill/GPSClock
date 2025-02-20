@@ -33,11 +33,11 @@ int main()
 {
 	stdio_init_all();
 
-	config_read_from_flash(config);
-	ble_init();
-	ble_set_command_cb(ble_command);
+	gps_init(uart1, 9600, 5, 4);
 	disp_init(pio0, 11, 10, 9);
-	gps_init(uart1, 9600, 5);
+	ble_init();  // Can take almost a second!
+	ble_set_command_cb(ble_command);
+	config_read_from_flash(config);
 
 	// Set up the PPS pin
 	gpio_set_irq_callback(gpio_isr);

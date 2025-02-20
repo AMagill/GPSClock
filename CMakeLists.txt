@@ -51,7 +51,7 @@ pico_set_program_name(GPSClock "GPSClock")
 pico_set_program_version(GPSClock "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(GPSClock 0)
+pico_enable_stdio_uart(GPSClock 1)
 pico_enable_stdio_usb(GPSClock 0)
 
 target_link_libraries(GPSClock

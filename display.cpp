@@ -3,8 +3,6 @@
 #include "hardware/dma.h"
 #include "tlc5952.pio.h"
 
-#define BOARD_VERSION 2
-
 static constexpr uint pio_sm    = 0;
 static constexpr uint num_chips = 6;
 
@@ -68,27 +66,6 @@ void disp_set_brightness(uint8_t bright)
 
 void disp_set_digit(uint digit, uint8_t value, bool dp)
 {
-#if BOARD_VERSION == 1
-	static constexpr uint32_t dp_bits = 0x000001;
-	static constexpr std::array<uint32_t, 11> digit_bits = {
-		0x248248, // 0
-		0x200008, // 1
-		0x241240, // 2
-		0x241048, // 3
-		0x209008, // 4
-		0x049048, // 5
-		0x049248, // 6
-		0x240008, // 7
-		0x249248, // 8
-		0x249048, // 9
-		0x000000, // Blank
-	};
-
-	uint chip   = num_chips - 1 - (digit / 3);
-	uint offset = digit % 3;
-	command_buffer[num_chips + chip] &= ~((digit_bits[8] | dp_bits) << offset);
-	command_buffer[num_chips + chip] |= (digit_bits[value] | (dp ? dp_bits : 0)) << offset;
-#else // BOARD_VERSION == 2
 	static constexpr uint32_t dp_bit = 0x000001;
 	static constexpr std::array<uint8_t, 11> digit_bits = {
 		0xEE, // 0
@@ -104,25 +81,25 @@ void disp_set_digit(uint digit, uint8_t value, bool dp)
 		0x00  // Blank
 	};
 
-	uint chip   = num_chips - 1 - (digit / 3);
+	uint chip   = digit / 3;
 	uint offset = (digit % 3) * 8;
 	// +num_chips because the first half of the buffer is brightness settings
 	command_buffer[num_chips + chip] &= ~(0xFF << offset);
 	command_buffer[num_chips + chip] |= (digit_bits[value] | (dp ? dp_bit : 0)) << offset;
-#endif
+}
+
+void disp_set_raw(uint chip, uint32_t value)
+{
+	command_buffer[num_chips + chip] = value & 0x00FFFFFF;
 }
 
 void disp_set_colons(bool on)
 {
-#if BOARD_VERSION == 1
-	constexpr uint32_t colon_bits = 0x000249;
-#else // BOARD_VERSION == 2
 	constexpr uint32_t colon_bits = 0x0000FF;
-#endif
 	if (on)
-		command_buffer[num_chips*2-1] |= colon_bits;
+		command_buffer[num_chips] |= colon_bits;
 	else
-		command_buffer[num_chips*2-1] &= ~colon_bits;
+		command_buffer[num_chips] &= ~colon_bits;
 }
 
 void disp_set_time(const Time_Parts& time, Time_Quality quality)

@@ -1,0 +1,13 @@
+{
+  "name": "TLC5952",
+  "apiVersion": "1.0.0",
+  "author": "Andrew Magill",
+  "version": "0.0.1",
+  "description": "",
+  "extensions": {
+    "TLC5952": {
+      "type": "HighLevelAnalyzer",
+      "entryPoint": "HighLevelAnalyzer.Hla"
+    }
+  }
+}

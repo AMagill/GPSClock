@@ -102,55 +102,6 @@ void disp_set_colons(bool on)
 		command_buffer[num_chips] &= ~colon_bits;
 }
 
-void disp_set_time(const Time_Parts& time, Time_Quality quality)
-{
-	disp_set_colons(true);
-
-	if (quality == Time_Quality::INVALID)
-	{	// Blank date when time is invalid; basically a timer since boot
-		for (int i = 1; i <= 8; i++)
-			disp_set_digit(i, 10, false);
-	}
-	else
-	{
-		disp_set_digit(1, time.year  / 1000 % 10, false);
-		disp_set_digit(2, time.year  /  100 % 10, false);
-		disp_set_digit(3, time.year  /   10 % 10, false);
-		disp_set_digit(4, time.year         % 10, false);
-		disp_set_digit(5, time.month /   10 % 10, false);
-		disp_set_digit(6, time.month        % 10, false);
-		disp_set_digit(7, time.day   /   10 % 10, false);
-		disp_set_digit(8, time.day          % 10, false);
-	}
-
-	disp_set_digit( 9, time.hour   / 10 % 10, false);
-	disp_set_digit(10, time.hour        % 10, false);
-	disp_set_digit(11, time.minute / 10 % 10, false);
-	disp_set_digit(12, time.minute      % 10, false);
-	disp_set_digit(13, time.second / 10 % 10, false);
-	disp_set_digit(14, time.second      % 10, true);
-
-	// Degrade display resolution as quality decreases
-	if (quality == Time_Quality::LOW)
-	{
-		disp_set_digit(15, time.millisecond / 100 % 10, false);
-		disp_set_digit(16, 10, false);
-		disp_set_digit(17, 10, false);
-	}
-	else if (quality == Time_Quality::MEDIUM)
-	{	
-		disp_set_digit(15, time.millisecond / 100 % 10, false);
-		disp_set_digit(16, time.millisecond /  10 % 10, false);
-		disp_set_digit(17, 10, false);
-	}
-	else if (quality == Time_Quality::HIGH || quality == Time_Quality::INVALID)
-	{
-		disp_set_digit(15, time.millisecond / 100 % 10, false);
-		disp_set_digit(16, time.millisecond /  10 % 10, false);
-		disp_set_digit(17, time.millisecond       % 10, false);
-	}
-}
-
 void disp_test()
 {
 		// Startup screen test

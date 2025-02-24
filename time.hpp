@@ -15,12 +15,4 @@ struct Time_Parts
 	int millisecond;
 };
 
-enum class Time_Quality
-{
-	INVALID,  // No idea of date or time
-	LOW,      // Time was known once, but not recently
-	MEDIUM,   // Time is fresh, but not PPS synced
-	HIGH,     // Time is fresh, and PPS synced
-};
-
 Time_Parts time_split(Time_us time_us);

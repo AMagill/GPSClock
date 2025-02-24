@@ -2,102 +2,80 @@
 #include "hardware/uart.h"
 #include <charconv>
 #include <chrono>
-
-#define ECHO_ON 0
+#include <cstring>
 
 static uart_inst_t* uart;
-static std::array<char, 82> rx_buf;  // Maximum length allowed by standard
+static std::array<uint8_t, 32> rx_buf;  // Needs to be at least as big as the largest message we expect
 static uint         rx_buf_pos         = rx_buf.size();  // Start in overrun state
 static uint64_t     clock_offset_us    = 0;
 static uint64_t     last_pps_time_us   = 0;
 static uint64_t     last_msg_time_us   = 0;
 static int          last_correction_us = 0;
-static Time_Quality quality            = Time_Quality::INVALID;
+static uint32_t     time_accuracy         = 0xFFFFFFFF;
 
-
-template <typename T>
-static bool parse(std::string_view str, T& value, int base)
+static std::pair<uint8_t, uint8_t> ubx_checksum(std::span<uint8_t> data)
 {
-	auto result = std::from_chars(str.begin(), str.end(), value, base);
-	return result.ec == std::errc() && result.ptr == str.end();
+	uint8_t ck_a = 0, ck_b = 0;
+	for (uint8_t b : data)
+	{
+		ck_a += b;
+		ck_b += ck_a;
+	}
+	return {ck_a, ck_b};
 }
 
-static void handle_sentence(std::string_view sentence)
+template <typename T>
+T read_bytes(std::span<uint8_t>& data)
 {
-	// First validate the checksum
-	if (sentence.size() < 9)  // Shortest possible valid sentence "$GPXXX*00"
-		return;
-	if (sentence[sentence.size() - 3] != '*')  // Expect a checksum delimiter here
+	T value;
+	std::memcpy(&value, data.data(), sizeof(T));
+	data = data.subspan(sizeof(T));
+	return value;
+}
+
+template <typename T>
+void skip_bytes(std::span<uint8_t>& data)
+{
+	data = data.subspan(sizeof(T));
+}
+
+
+static void handle_ubx(std::span<uint8_t> msg)
+{
+	if (msg.size() < 6)  // Shortest possible message with zero payload
 		return;
 	
-	// Parse the checksum out of the last two bytes
-	char checksum;
-	if (!parse(sentence.substr(sentence.size() - 2), checksum, 16))
+	// First validate the checksum
+	auto [ck_a, ck_b] = ubx_checksum(msg.subspan(0, msg.size()-2));
+	if (ck_a != msg[msg.size()-2] || ck_b != msg[msg.size()-1])
 		return;
-
-	// Checksum the sentence
-	sentence = sentence.substr(1, sentence.size() - 4);  // Trim off start and checksum
-	for (char ch : sentence)
-		checksum ^= ch;
-
-	// Should come out to zero when valid
-	if (checksum != 0)
-	{
-#if ECHO_GPS
-		printf("   CS FAIL\n");
-#endif
-		return;
-	}
-
-	// Split the sentence into fields
-	std::array<std::string_view, 12> fields;  // Could be more, but I don't care.  Increase if needed.
-	for (size_t i = 0; i < fields.size(); i++)
-	{
-		if (size_t end = sentence.find(','); end != sentence.npos)
-		{
-			fields[i] = sentence.substr(0, end);
-			sentence = sentence.substr(end + 1);
-		}
-		else
-		{
-			fields[i] = sentence;
-			break;
-		}
-	}
+	
+	// We'll consume the message as we go
+	msg = msg.subspan(0, msg.size()-2);
 
 	uint64_t hw_time_us = to_us_since_boot(get_absolute_time());
 
-	// Now handle the payload.  We're only really interested in a couple fields from GPRMC.
-	// $GPRMC,041826.000,A,3959.0864,N,10514.5749,W,0.11,95.04,271124,,,A*4C	
-	// 0     1^^^time^^^2 3         4 5          6 7    8     9^date^ABC
-	// We need the time in field 1, and date in field 9.
-	if (fields[0] == "GNRMC")
-	{
-		// Expect time, like: "041826.000"
-		const std::string_view& time = fields[1];
-		uint8_t th, tm, ts, tms;
-		if (time.size() < 10)
-			return;
-		if (!parse(time.substr(0, 2), th,  10) ||
-		    !parse(time.substr(2, 2), tm,  10) ||
-		    !parse(time.substr(4, 2), ts,  10) ||
-		    !parse(time.substr(7, 3), tms, 10))
-			return;
+	uint8_t cls = read_bytes<uint8_t>(msg);
+	uint8_t id  = read_bytes<uint8_t>(msg);
+	skip_bytes<uint16_t>(msg);  // Length
 
-		// Expect date, like: "271124"
-		const std::string_view& date = fields[9];
-		if (date.size() != 6)
-			return;
-		int dy;
-		uint dm, dd;
-		if (!parse(date.substr(0, 2), dd, 10) ||
-		    !parse(date.substr(2, 2), dm, 10) ||
-		    !parse(date.substr(4, 2), dy, 10))
-			return;
+	// Now handle messages we're interested in.
+	if (cls == 0x01 && id == 0x21 && msg.size() == 20)  // UBX-NAV-TIMEUTC
+	{
+		skip_bytes<uint32_t>(msg);  // iTOW
+		uint32_t tAcc  = read_bytes<uint32_t>(msg);
+		int32_t  nano  = read_bytes<int32_t>(msg);
+		uint16_t dy    = read_bytes<uint16_t>(msg);
+		uint8_t  dm    = read_bytes<uint8_t>(msg);
+		uint8_t  dd    = read_bytes<uint8_t>(msg);
+		uint8_t  th    = read_bytes<uint8_t>(msg);
+		uint8_t  tm    = read_bytes<uint8_t>(msg);
+		uint8_t  ts    = read_bytes<uint8_t>(msg);
+		uint8_t  valid = read_bytes<uint8_t>(msg);
 
 		// Assemble the time
 		using namespace std::chrono;
-		Time_us gps_time  = sys_days{year{2000+dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
+		Time_us utc_time  = sys_days{year{dy} / month{dm} / day{dd}} + hours{th} + minutes{tm} + seconds{ts};
 		uint64_t old_offset = clock_offset_us;
 		last_msg_time_us    = hw_time_us;
 
@@ -105,35 +83,25 @@ static void handle_sentence(std::string_view sentence)
 		if (hw_time_us - last_pps_time_us < 1'000'000)
 		{	// Less than a second since last PPS.  We're going to ignore the
 			// milliseconds in the message, and align the second to the PPS.
-			clock_offset_us = gps_time.time_since_epoch().count() - last_pps_time_us;
+			clock_offset_us = utc_time.time_since_epoch().count() - last_pps_time_us;
 		}
 		else
 		{	// More than a second since last PPS.  We'll use the message time.
-			gps_time += milliseconds(tms);
-			clock_offset_us = gps_time.time_since_epoch().count() - hw_time_us;
+			utc_time += microseconds(nano / 1000);
+			clock_offset_us = utc_time.time_since_epoch().count() - hw_time_us;
 		}
 
 		last_correction_us = clock_offset_us - old_offset;
+		printf("%+d\n", last_correction_us);
 	}
-
-	// Estimate time quality
-	//            I L M H
-	// Have  msg  N Y Y Y
-	// Fresh msg  N N Y Y
-	// Fresh PPS  N N N Y
-	if (last_msg_time_us > 0)
+	else if (cls == 0x01 && id == 0x22 && msg.size() == 20)  // UBX-NAV-CLOCK
 	{
-		if (hw_time_us - last_msg_time_us < 1'000'000)
-		{
-			if (hw_time_us - last_pps_time_us < 1'000'000)
-				quality = Time_Quality::HIGH;
-			else
-				quality = Time_Quality::MEDIUM;
-		}
-		else
-			quality = Time_Quality::LOW;
+		skip_bytes<uint32_t>(msg);               // iTOW ms
+		skip_bytes<int32_t>(msg);                // clkB ns
+		skip_bytes<int32_t>(msg);                // clkD ns/s
+		time_accuracy = read_bytes<uint32_t>(msg);  // tAcc ns
+		skip_bytes<uint32_t>(msg);               // fAcc ps/s
 	}
-	// Quality is initially invalid, but we can never drop back down to it.
 }
 
 static void uart_rx_isr()
@@ -141,48 +109,56 @@ static void uart_rx_isr()
 	while (uart_is_readable(uart))
 	{
 		char ch = uart_getc(uart);
-#if ECHO_GPS
-		printf("%c", ch);
-#endif
 		
-		if (ch == '$')  // Start delimiter
+		// We only care about UBX messages. They start with 0xB5, 0x62.
+		// Use rx_buf_pos as a sort of state machine, invalidating when the frame looks bad.
+		if (rx_buf_pos == 0 && ch != 0xB5)
+				continue;
+		if (rx_buf_pos == 1 && ch != 0x62)
+		{
 			rx_buf_pos = 0;
-		else if (rx_buf_pos == rx_buf.size()) // Overrun
-			return;
-		
-		if (rx_buf_pos > 0 && rx_buf[rx_buf_pos-1] == '\r' && ch == '\n') // End delimiter
-			handle_sentence(std::string_view(rx_buf.data(), rx_buf_pos-1));
-		else
-			rx_buf[rx_buf_pos++] = ch;
+			continue;
+		}
+		if (rx_buf_pos >= rx_buf.size())
+		{	// We've overrun the buffer.  Start over.
+			rx_buf_pos = 0;
+			continue;
+		}
+
+		rx_buf[rx_buf_pos++] = ch;
+		if (rx_buf_pos > 6)
+		{	// We have enough to check the length
+			uint16_t len = rx_buf[4] | (rx_buf[5] << 8);
+			if (rx_buf_pos == len + 8)
+			{	// We have a complete message
+				handle_ubx(std::span(rx_buf.data()+2, len+6));
+				rx_buf_pos = 0;
+			}
+		}
 	}
 }
 
 void gps_send_ubx(uint8_t cls, uint8_t id, std::initializer_list<uint8_t> payload)
 {
-	uart_write_blocking(uart, "\xB5\x62", 2);
-	uart_write_blocking(uart, &cls, 1);
-	uart_write_blocking(uart, &id, 1);
+	std::vector<uint8_t> buf;
+	buf.reserve(8 + payload.size());
+	buf.push_back(0xB5);
+	buf.push_back(0x62);
+	buf.push_back(cls);
+	buf.push_back(id);
 	uint16_t len = payload.size();
-	uart_write_blocking(uart, (uint8_t*)&len, 2);
-	uart_write_blocking(uart, payload.begin(), len);
+	buf.push_back(len & 0xFF);
+	buf.push_back(len >> 8);
+	std::copy(payload.begin(), payload.end(), std::back_inserter(buf));
 
-	uint8_t ck_a = 0, ck_b = 0;
-	auto sum = [&ck_a, &ck_b](uint8_t b)
-	{
-		ck_a += b;
-		ck_b += ck_a;
-	};
-	sum(cls);
-	sum(id);
-	sum(len & 0xFF);
-	sum(len >> 8);
-	for (uint8_t b : payload)
-		sum(b);
-	uart_write_blocking(uart, &ck_a, 1);
-	uart_write_blocking(uart, &ck_b, 1);
+	auto [ck_a, ck_b] = ubx_checksum(std::span(buf.begin()+2, buf.end()));
+	buf.push_back(ck_a);
+	buf.push_back(ck_b);
+
+	uart_write_blocking(uart, buf.data(), buf.size());
 }
 
-void gps_init(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
+void gps_init_io(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
 {
 	// Set up the GPS UART
 	::uart = uart;
@@ -196,16 +172,40 @@ void gps_init(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin)
 	irq_set_exclusive_handler(gps_uart_irq, uart_rx_isr);
 	irq_set_enabled(gps_uart_irq, true);
 	uart_set_irq_enables(uart, true, false);
+}
 
-	gps_send_ubx(0x06, 0x24, {0xF0, 0x00, 0x00});  // GGA off
-	gps_send_ubx(0x06, 0x24, {0xF0, 0x01, 0x00});  // GLL off
-	gps_send_ubx(0x06, 0x24, {0xF0, 0x02, 0x00});  // GSA off
-	gps_send_ubx(0x06, 0x24, {0xF0, 0x03, 0x00});  // GSV off
-	//gps_send_ubx(0x06, 0x24, {0xF0, 0x04, 0x00});  // RMC off
-	gps_send_ubx(0x06, 0x24, {0xF0, 0x05, 0x00});  // VTG off
-	//gps_send_ubx(0x06, 0x24, {0x01, 0x21, 0x01});  // UBX-NAV-TIMEUTC 1Hz
-	gps_send_ubx(0x06, 0x24, {0x01, 0x21, 0x01});  // UBX-TIM-TOS 1Hz
-
+void gps_init_comms()
+{
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x00, 0x00});  // UBX-CFG-MSG: GGA off
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x01, 0x00});  // UBX-CFG-MSG: GLL off
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x02, 0x00});  // UBX-CFG-MSG: GSA off
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x03, 0x00});  // UBX-CFG-MSG: GSV off
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x04, 0x00});  // UBX-CFG-MSG: RMC off
+	gps_send_ubx(0x06, 0x01, {0xF0, 0x05, 0x00});  // UBX-CFG-MSG: VTG off
+	gps_send_ubx(0x06, 0x01, {0x01, 0x21, 0x01});  // UBX-CFG-MSG: UBX-NAV-TIMEUTC 1Hz
+	gps_send_ubx(0x06, 0x01, {0x01, 0x22, 0x01});  // UBX-CFG-MSG: UBX-NAV-CLOCK   1Hz
+	gps_send_ubx(0x06, 0x31, {                     // UBX-CFG-TP5:
+			0x00,        // TIMEPULSE                 0
+			0x01,        // Message version           1 
+			0x00, 0x00,  // Reserved
+			0x00, 0x00,  // Antenna cable delay       0 ns
+			0x00, 0x00,  // RF group delay            0 ns
+			 1, 0, 0, 0, // Frequency                 1 Hz
+			 1, 0, 0, 0, // Locked frequency          1 Hz
+			10, 0, 0, 0, // Pulse length             10 us
+			10, 0, 0, 0, // Locked pulse length      10 us
+			 0, 0, 0, 0, // User configurable delay   0 ns
+			             // Flags:  (Bits 0-7)
+			 1<<0 |      //   Active
+			 1<<1 |      //   Locked to GPS time
+			 1<<3 |      //   Frequency units Hz
+			 1<<4 |      //   Time units us
+			 1<<5 |      //   Align to top of second
+			 1<<6,       //   Rising edge
+			             // Flags:  (Bits 8-15)
+			 1<<3,       //   Can lose sync
+			 0, 0,       // Flags;  (Bits 16-31 unused)
+	});
 }
 
 Time_us gps_get_time()
@@ -218,9 +218,9 @@ Time_us gps_get_time()
 	return time;
 }
 
-Time_Quality gps_get_time_quality()
+uint32_t gps_get_time_accuracy_ns()
 {
-	return quality;
+	return time_accuracy;
 }
 
 void gps_on_pps()

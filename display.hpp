@@ -12,5 +12,4 @@ void disp_set_brightness(uint8_t bright);
 void disp_set_digit(uint digit, uint8_t value, bool dp);
 void disp_set_raw(uint chip, uint32_t value);
 void disp_set_colons(bool on);
-void disp_set_time(const Time_Parts& time, Time_Quality quality);
 void disp_test();

@@ -15,6 +15,7 @@
 #define CH_TIME_CFG      ATT_CHARACTERISTIC_00000003_B0A0_475D_A2F4_A32CD026A911_01_CLIENT_CONFIGURATION_HANDLE
 #define CH_TIME_ZONE     ATT_CHARACTERISTIC_00000004_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
 #define CH_BRIGHT        ATT_CHARACTERISTIC_00000005_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
+#define CH_TIME_ACC      ATT_CHARACTERISTIC_00000006_B0A0_475D_A2F4_A32CD026A911_01_VALUE_HANDLE
 
 extern Config config;
 
@@ -32,6 +33,7 @@ static_assert(sizeof(adv_data) <= 31, "adv_data too long");  // BLE limitation
 static uint16_t time_client_config;
 static hci_con_handle_t con_handle;
 static uint8_t current_time[19] = {0};  // "YYYY-MM-DD hh:mm:ss"
+static uint32_t time_acc = 0xFFFFFFFF;
 static std::function<void(BLECommand)> command_cb;
 
 static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) 
@@ -74,7 +76,8 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 		time_client_config = 0;
 		break;
 	case ATT_EVENT_CAN_SEND_NOW:
-		att_server_notify(con_handle, CH_TIME, current_time, sizeof(current_time));
+		att_server_notify(con_handle, CH_TIME,     current_time,        sizeof(current_time));
+		att_server_notify(con_handle, CH_TIME_ACC, (uint8_t*)&time_acc, sizeof(time_acc));
 		break;
 	default:
 		break;
@@ -158,12 +161,13 @@ void ble_init()
 	hci_power_control(HCI_POWER_ON);
 }
 
-void ble_tick_time(const Time_Parts& time)
+void ble_tick_time(const Time_Parts& time, uint32_t time_acc)
 {
 	std::format_to_n(current_time, sizeof(current_time), 
 		"{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
 		time.year, time.month, time.day, 
 		time.hour, time.minute, time.second);
+	::time_acc = time_acc;
 	if (time_client_config & GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_INDICATION)
 		att_server_request_can_send_now_event(con_handle);
 }

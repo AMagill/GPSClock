@@ -67,6 +67,12 @@ Software TODO
 [x] Balance channel current
 [x] Hook BLE into config better
 [x] BLE command characteristic, to write flash
+[ ] Startup screen; ID, test, ?
+[x] Fix BLE time display
+[c] BLE time accuracy
+[x] BLE log
+[ ] More BLE status?
+[ ] Switch to nav message?
 
 
 Bluetooth

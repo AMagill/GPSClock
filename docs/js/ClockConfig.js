@@ -4,8 +4,9 @@ class ClockConfig {
 		this._chCommand  = null;
 		this._chTimeZone = null;
 		this._chBright   = null;
-		this._boundHandleChNotifyTime = this._handleChNotifyTime.bind(this);
-		this._boundHandleDisconnect   = this._handleDisconnect.bind(this);
+		this._boundHandleChNotifyTime    = this._handleChNotifyTime.bind(this);
+		this._boundHandleChNotifyTimeAcc = this._handleChNotifyTimeAcc.bind(this);
+		this._boundHandleDisconnect      = this._handleDisconnect.bind(this);
 	}
 
 	_log(...messages) {
@@ -21,6 +22,11 @@ class ClockConfig {
 	_handleChNotifyTime(event) {
 		const time = new TextDecoder().decode(event.target.value);
 		this._onGotValue('Time', time);
+	}
+
+	_handleChNotifyTimeAcc(event) {
+		const timeAcc = event.target.value.getUint32(0, true);
+		this._onGotValue('TimeAccuracy', timeAcc);
 	}
 
 	_handleDisconnect(event) {
@@ -52,6 +58,7 @@ class ClockConfig {
 		const chTime     = await service.getCharacteristic('00000003-b0a0-475d-a2f4-a32cd026a911');
 		this._chTimeZone = await service.getCharacteristic('00000004-b0a0-475d-a2f4-a32cd026a911');
 		this._chBright   = await service.getCharacteristic('00000005-b0a0-475d-a2f4-a32cd026a911');
+		const chTimeAcc  = await service.getCharacteristic('00000006-b0a0-475d-a2f4-a32cd026a911');
 
 		this._log('Retrieving values...');
 		const time       = new TextDecoder().decode(await chTime.readValue());
@@ -64,6 +71,8 @@ class ClockConfig {
 		this._log('Starting notifications...');
 		await chTime.startNotifications();
 		chTime.addEventListener('characteristicvaluechanged', this._boundHandleChNotifyTime)
+		await chTimeAcc.startNotifications();
+		chTimeAcc.addEventListener('characteristicvaluechanged', this._boundHandleChNotifyTimeAcc)
 
 		this._log('Connected');
 	}

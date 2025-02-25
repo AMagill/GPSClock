@@ -12,6 +12,7 @@
 using namespace std::chrono_literals;
 
 Config config;
+uint64_t last_ble_tick = 0;
 
 static void gpio_isr(uint gpio, uint32_t event_mask)
 {
@@ -47,7 +48,8 @@ int64_t do_every_ms(alarm_id_t id, void *user_data)
 	disp_set_brightness(config.brightness);
 	disp_set_colons(true);
 
-	if (time_acc == 0xFFFFFFFF)
+	bool time_invalid = time_acc == 0xFFFFFFFF;
+	if (time_invalid)
 	{	// Blank date when time is invalid; basically a timer since boot
 		for (int i = 1; i <= 8; i++)
 			disp_set_digit(i, 10, false);
@@ -72,23 +74,31 @@ int64_t do_every_ms(alarm_id_t id, void *user_data)
 	disp_set_digit(14, time.second      % 10, true);
 
 	// Degrade display resolution as quality decreases
-	if (time_acc < 100'000'000)  // 100ms
+	if (time_invalid || time_acc < 100'000'000)  // 100ms
 		disp_set_digit(15, time.millisecond / 100 % 10, false);
 	else
 		disp_set_digit(15, 10, false);
 
-	if (time_acc < 10'000'000)  // 10ms
+	if (time_invalid || time_acc < 10'000'000)  // 10ms
 		disp_set_digit(16, time.millisecond /  10 % 10, false);
 	else
 		disp_set_digit(16, 10, false);
 	
-	if (time_acc < 1'000'000)  // 1ms
+	if (time_invalid || time_acc < 1'000'000)  // 1ms
 		disp_set_digit(17, time.millisecond       % 10, false);
 	else
 		disp_set_digit(17, 10, false);
 
 	// Send the display data.  Latches brightness, but not state
 	disp_send();
+
+	// Send the time to BLE every second
+	uint64_t now = to_us_since_boot(get_absolute_time());
+	if (now - last_ble_tick > 1'000'000)
+	{
+		last_ble_tick = now;
+		ble_tick_time(time, time_acc);
+	}
 
 	// Schedule the next update
 	int64_t us_to_next_ms = 1000 - (time_us.time_since_epoch() % 1ms).count();
@@ -129,18 +139,8 @@ int main()
 	alarm_pool_init_default();
 	add_alarm_in_us(1000, do_every_ms, nullptr, true);
 
-	uint64_t last_s = 0;
 	while (true)
 	{
-		uint64_t now = to_us_since_boot(get_absolute_time());
-		if (now - last_s > 1'000'000)
-		{
-			last_s = now;
-			printf("4  ");
-			volatile int foo = 42;
-			//ble_tick_time(time_parts);
-		}
-	
-	
+		sleep_ms(1000);
 	}
 }

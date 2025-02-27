@@ -21,7 +21,7 @@ body {
 .row label {
     width: 120px;
     font-weight: bold;
-    color: #333;
+    color: #000;
     margin-right: 0.5rem;
 }
 
@@ -34,7 +34,7 @@ body {
 input {
     width: 4rem;
     padding: 4px;
-    border: 2px solid #000;
+    border: 1px solid #000;
     border-radius: 4px;
 }
 
@@ -44,7 +44,7 @@ button {
     margin: 0.25rem;
     border: none;
     border-radius: 4px;
-    background-color: #333;
+    background-color: #000;
     color: #fff;
     cursor: pointer;
 }
@@ -68,15 +68,15 @@ button#save:enabled {
 
 #time {
     font-weight: bold;
-    color: #666;
+    color: #000;
 }
 
 #time-accuracy {
     padding-left: 10px;
-    color: #666;
+    color: #000;
 }
 
-textarea#log {
+#log {
     width: 100%;
     height: 60px;
     padding: 0.5rem;

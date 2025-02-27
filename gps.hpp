@@ -8,5 +8,5 @@
 void gps_init_io(uart_inst_t* uart, uint baud, uint rx_pin, uint tx_pin);
 void gps_init_comms();
 void gps_on_pps();
-Time_us gps_get_time();
+uint64_t gps_get_clock_offset_us();
 uint32_t gps_get_time_accuracy_ns();

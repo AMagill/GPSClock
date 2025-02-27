@@ -41,8 +41,10 @@ void disp_latch()
 	pio_sm_exec(pio, pio_sm, pio_encode_jmp(pio_offset + tlc5952_write_offset_latch));
 }
 
-void disp_send()
+void disp_send(bool latch)
 {
+	if (latch)
+		command_buffer[num_chips*2-1] |= 0x02'000000;  // Set flag to latch after the last chip
 	dma_channel_set_read_addr(dma_channel, command_buffer.data(), true);  // Start DMA transfer
 }
 
@@ -51,6 +53,8 @@ void disp_set_brightness(uint8_t bright)
 	// The TLC5952 supplies less current to the blue channels,
 	// so we need to slightly dim red and green to compensate.
 	uint8_t brightRG = bright * 0.88f;  // Experimentally determined
+	bright   = std::clamp<uint8_t>(bright,   1, 127);
+	brightRG = std::clamp<uint8_t>(brightRG, 1, 127);
 
 	for (int i = 0; i < num_chips; i++)
 	{
@@ -64,33 +68,44 @@ void disp_set_brightness(uint8_t bright)
 	command_buffer[num_chips-1] |= 0x02'000000;
 }
 
-void disp_set_digit(uint digit, uint8_t value, bool dp)
+void disp_clear()
+{
+	for (int i = num_chips; i < num_chips*2; i++)
+		command_buffer[i] = 0;
+}
+
+void disp_set_num(uint digit, uint8_t value, bool dp)
 {
 	static constexpr uint32_t dp_bit = 0x000001;
-	static constexpr std::array<uint8_t, 11> digit_bits = {
+	static constexpr std::array<uint8_t, 16> digit_bits = {
 		0xEE, // 0
 		0x82, // 1
-		0xDC, // 2
-		0xD6, // 3
-		0xB2, // 4
-		0x76, // 5
-		0x7E, // 6
+		0xDC, // 2       _40_
+		0xD6, // 3   20 |    | 80
+		0xB2, // 4      |_10_|
+		0x76, // 5   08 |    | 02
+		0x7E, // 6      |_04_|   O 01
 		0xC2, // 7
 		0xFE, // 8
 		0xF6, // 9
-		0x00  // Blank
+		0xFA, // A
+		0x3E, // b
+		0x1C, // c
+		0x9E, // d
+		0x7C, // E
+		0x78, // F
 	};
 
+	uint8_t leds = digit_bits[value] | (dp ? dp_bit : 0);
+	disp_set_raw(digit, leds);
+}
+
+void disp_set_raw(uint digit, uint8_t value)
+{
 	uint chip   = digit / 3;
 	uint offset = (digit % 3) * 8;
 	// +num_chips because the first half of the buffer is brightness settings
-	command_buffer[num_chips + chip] &= ~(0xFF << offset);
-	command_buffer[num_chips + chip] |= (digit_bits[value] | (dp ? dp_bit : 0)) << offset;
-}
-
-void disp_set_raw(uint chip, uint32_t value)
-{
-	command_buffer[num_chips + chip] = value & 0x00FFFFFF;
+	command_buffer[num_chips + chip] |= value << offset;
 }
 
 void disp_set_colons(bool on)
@@ -100,34 +115,4 @@ void disp_set_colons(bool on)
 		command_buffer[num_chips] |= colon_bits;
 	else
 		command_buffer[num_chips] &= ~colon_bits;
-}
-
-void disp_test()
-{
-		// Startup screen test
-		disp_set_brightness(127);
-		for (int i = 0; i < 6; ++i)
-		{
-			uint32_t bits = 0;
-			for (int j = 0; j < 24; ++j)
-			{
-				bits = bits<<1 | 1;
-				disp_set_raw(i, bits);
-				disp_send();
-				disp_latch();
-				sleep_ms(20);
-			}
-		}
-		for (int i = 5; i >= 0; --i)
-		{
-			uint32_t bits = 0x00FFFFFF;
-			for (int j = 0; j < 24; ++j)
-			{
-				bits >>= 1;
-				disp_set_raw(i, bits);
-				disp_send();
-				disp_latch();
-				sleep_ms(20);
-			}
-		}	
 }

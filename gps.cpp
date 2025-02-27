@@ -63,7 +63,7 @@ static void handle_ubx(std::span<uint8_t> msg)
 	if (cls == 0x01 && id == 0x21 && msg.size() == 20)  // UBX-NAV-TIMEUTC
 	{
 		skip_bytes<uint32_t>(msg);  // iTOW
-		uint32_t tAcc  = read_bytes<uint32_t>(msg);
+		time_accuracy  = read_bytes<uint32_t>(msg);
 		int32_t  nano  = read_bytes<int32_t>(msg);
 		uint16_t dy    = read_bytes<uint16_t>(msg);
 		uint8_t  dm    = read_bytes<uint8_t>(msg);
@@ -72,6 +72,12 @@ static void handle_ubx(std::span<uint8_t> msg)
 		uint8_t  tm    = read_bytes<uint8_t>(msg);
 		uint8_t  ts    = read_bytes<uint8_t>(msg);
 		uint8_t  valid = read_bytes<uint8_t>(msg);
+
+		if (!(valid & 0x04))
+		{	// Invalid UTC time
+			clock_offset_us = 0;
+			return;
+		}
 
 		// Assemble the time
 		using namespace std::chrono;
@@ -93,14 +99,6 @@ static void handle_ubx(std::span<uint8_t> msg)
 
 		last_correction_us = clock_offset_us - old_offset;
 		printf("%+d\n", last_correction_us);
-	}
-	else if (cls == 0x01 && id == 0x22 && msg.size() == 20)  // UBX-NAV-CLOCK
-	{
-		skip_bytes<uint32_t>(msg);               // iTOW ms
-		skip_bytes<int32_t>(msg);                // clkB ns
-		skip_bytes<int32_t>(msg);                // clkD ns/s
-		time_accuracy = read_bytes<uint32_t>(msg);  // tAcc ns
-		skip_bytes<uint32_t>(msg);               // fAcc ps/s
 	}
 }
 
@@ -183,7 +181,6 @@ void gps_init_comms()
 	gps_send_ubx(0x06, 0x01, {0xF0, 0x04, 0x00});  // UBX-CFG-MSG: RMC off
 	gps_send_ubx(0x06, 0x01, {0xF0, 0x05, 0x00});  // UBX-CFG-MSG: VTG off
 	gps_send_ubx(0x06, 0x01, {0x01, 0x21, 0x01});  // UBX-CFG-MSG: UBX-NAV-TIMEUTC 1Hz
-	gps_send_ubx(0x06, 0x01, {0x01, 0x22, 0x01});  // UBX-CFG-MSG: UBX-NAV-CLOCK   1Hz
 	gps_send_ubx(0x06, 0x31, {                     // UBX-CFG-TP5:
 			0x00,        // TIMEPULSE                 0
 			0x01,        // Message version           1 
@@ -208,14 +205,9 @@ void gps_init_comms()
 	});
 }
 
-Time_us gps_get_time()
+uint64_t gps_get_clock_offset_us()
 {
-	using namespace std::chrono;
-
-	uint64_t hw_time = to_us_since_boot(get_absolute_time());
-	Time_us time = Time_us(microseconds(clock_offset_us)) + microseconds(hw_time);
-
-	return time;
+	return clock_offset_us;
 }
 
 uint32_t gps_get_time_accuracy_ns()

@@ -41,12 +41,11 @@ config._onDisconnected = function() {
 	buttonConnect.disabled    = false;
 	buttonDisconnect.disabled = true;
 	buttonSave.disabled       = true;
-	labelTime.disabled        = true;
 	labelTime.innerText       = '';
+	labelTimeAcc.innerText    = '';
 	inputTimeZone.disabled    = true;
 	inputTimeZone.value       = '';
 	inputBrightness.disabled  = true;
-	inputBrightness.value     = '';
 };
 
 buttonConnect.onclick = function(event) {
@@ -55,7 +54,6 @@ buttonConnect.onclick = function(event) {
 		.then(() => {
 			buttonDisconnect.disabled = false;
 			buttonSave.disabled       = false;
-			labelTime.disabled        = false;
 			inputTimeZone.disabled    = false;
 			inputBrightness.disabled  = false;
 		})
@@ -73,16 +71,13 @@ inputTimeZone.oninput = async function(event) {
 	const timeZone = parseInt(inputTimeZone.value);
 
 	if (timeZone >= -12 && timeZone <= 12) {
-		await config.setValue('TimeZone', new Int32Array([timeZone]));
+		await config.setValue('TimeZone', timeZone);
 	}
 }
 
 inputBrightness.oninput = async function(event) {
-	const brightness = parseInt(inputBrightness.value);
-
-	if (brightness >= 0 && brightness <= 127) {
-		await config.setValue('Brightness', new Int8Array([brightness]));
-	}
+	const brightness = Math.min(Math.max(inputBrightness.value, 0), 127);
+	await config.setValue('Brightness', brightness);
 }
 
 buttonSave.onclick = function(event) {

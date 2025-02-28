@@ -106,11 +106,11 @@ class ClockConfig {
 		if (name === 'TimeZone') {
 			const buf = new ArrayBuffer(4);
 			new DataView(buf).setUint32(0, value, true);
-			await this._chTimeZone.writeValueWithResponse(buf);
+			await this._chTimeZone.writeValueWithoutResponse(buf);
 		} else if (name === 'Brightness') {
 			const buf = new ArrayBuffer(1);
 			new DataView(buf).setInt8(0, value);
-			await this._chBright.writeValueWithResponse(buf);
+			await this._chBright.writeValueWithoutResponse(buf);
 		} else {
 			this._log('Unknown value!');
 		}
@@ -124,6 +124,6 @@ class ClockConfig {
 		this._log('Sending save command');
 		const buf = new ArrayBuffer(4);
 		new DataView(buf).setUint32(0, 0x31a86b97, true);
-		await this._chCommand.writeValueWithResponse(buf);
+		await this._chCommand.writeValueWithoutResponse(buf);
 	}
 }

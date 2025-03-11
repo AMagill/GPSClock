@@ -60,11 +60,11 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 		memset(null_addr, 0, 6);
 		
 		{ // Put a unique byte in the advertised name
-			uint8_t id[FLASH_UNIQUE_ID_SIZE_BYTES];
-			flash_get_unique_id(id);
+			uint8_t id = ble_get_id();
+
 			assert(adv_data[15] == '0' && adv_data[16] == '0');
-			adv_data[15] = char_for_nibble(id[FLASH_UNIQUE_ID_SIZE_BYTES-1] >> 4);
-			adv_data[16] = char_for_nibble(id[FLASH_UNIQUE_ID_SIZE_BYTES-1] & 0x0f);
+			adv_data[15] = char_for_nibble(id >> 4);
+			adv_data[16] = char_for_nibble(id & 0x0f);
 		}
 		
 		gap_advertisements_set_params(adv_int_min, adv_int_max, adv_type, 0, null_addr, 0x07, 0x00);
@@ -175,4 +175,17 @@ void ble_tick_time(const Time_Parts& time, uint32_t time_acc)
 void ble_set_command_cb(std::function<void(BLECommand)> cb)
 {
 	command_cb = cb;
+}
+
+uint8_t ble_get_id()
+{
+	// These IDs seem to have runs in the high and low bytes, so XOR them to get a more unique value
+	uint8_t id[FLASH_UNIQUE_ID_SIZE_BYTES];
+	flash_get_unique_id(id);
+
+	uint8_t id8 = 0;
+	for (int i = 0; i < FLASH_UNIQUE_ID_SIZE_BYTES; ++i)
+		id8 ^= id[i];
+
+	return id8;
 }

@@ -140,10 +140,9 @@ int main()
 	disp_clear();
 	disp_set_brightness(config.brightness);
 	{
-		uint8_t id[FLASH_UNIQUE_ID_SIZE_BYTES];
-		flash_get_unique_id(id);
-		disp_set_num(7, id[FLASH_UNIQUE_ID_SIZE_BYTES-1] >> 4,   false);
-		disp_set_num(8, id[FLASH_UNIQUE_ID_SIZE_BYTES-1] & 0x0f, false);
+		uint8_t id = ble_get_id();
+		disp_set_num(7, id >> 4,   false);
+		disp_set_num(8, id & 0x0f, false);
 	}
 	disp_send(true);
 	sleep_ms(1000);

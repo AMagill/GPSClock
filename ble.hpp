@@ -12,3 +12,4 @@ enum class BLECommand
 void  ble_init();
 void  ble_tick_time(const Time_Parts& time, uint32_t time_acc);
 void  ble_set_command_cb(std::function<void(BLECommand)> cb);
+uint8_t ble_get_id();

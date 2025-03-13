@@ -87,3 +87,11 @@ button#save:enabled {
     font-family: monospace;
     resize: vertical;
 }
+
+#ble-warning {
+    display: none;
+    background-color: #f00;
+    color: #fff;
+    font-weight: bold;
+    text-align: center;
+}

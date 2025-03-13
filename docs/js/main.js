@@ -11,11 +11,15 @@ const textAreaLog      = document.getElementById('log');
 
 buttonDisconnect.disabled = true;
 
+if (!('bluetooth' in navigator)) {
+	buttonConnect.disabled = true;
+	document.getElementById('ble-warning').style.display = 'block';
+}
+
 config._log = function(...messages) {
 	console.log(...messages);
 	textAreaLog.value += messages.join(' ') + '\n';
 	textAreaLog.scrollTop = textAreaLog.scrollHeight;
-
 }
 
 config._onGotValue = function(name, value) {
@@ -58,7 +62,7 @@ buttonConnect.onclick = function(event) {
 			inputBrightness.disabled  = false;
 		})
 		.catch((error) => {
-			console.error('Error: ' + error);
+			config._log('Error: ' + error);
 			buttonConnect.disabled = false;
 		});
 };
